@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { publishMatchEvent } from "@/lib/runtime/match-events";
+import { recordAndPublishMatchEvent } from "@/lib/runtime/event-log";
 import { serializeMatchSummary } from "@/lib/runtime/match-summary";
 import { requireUnlockedResponse } from "@/lib/security/require-unlock";
 
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
 
   const summary = serializeMatchSummary(match);
 
-  publishMatchEvent({
+  await recordAndPublishMatchEvent({
     type: "match.created",
     matchId: match.id,
     payload: {

@@ -1,14 +1,34 @@
 import { MatchMode, MatchStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { publishMatchEvent } from "@/lib/runtime/match-events";
+import { resolveAgentDecision } from "@/lib/runtime/agent-decision";
+import { recordAndPublishMatchEvent } from "@/lib/runtime/event-log";
+import { HandEngine } from "@/lib/runtime/hand-engine";
 import { serializeMatchSummary } from "@/lib/runtime/match-summary";
 
 const activeIntervals = new Map<string, NodeJS.Timeout>();
 const inFlightTicks = new Set<string>();
+const engines = new Map<string, HandEngine>();
 
 const HANDS_PER_LEVEL = 10;
 const MAX_SIM_HANDS = 120;
+const BLIND_LEVELS: Array<{ smallBlind: number; bigBlind: number }> = [
+  { smallBlind: 10, bigBlind: 20 },
+  { smallBlind: 15, bigBlind: 30 },
+  { smallBlind: 20, bigBlind: 40 },
+  { smallBlind: 30, bigBlind: 60 },
+  { smallBlind: 40, bigBlind: 80 },
+  { smallBlind: 50, bigBlind: 100 },
+  { smallBlind: 75, bigBlind: 150 },
+  { smallBlind: 100, bigBlind: 200 },
+  { smallBlind: 150, bigBlind: 300 },
+  { smallBlind: 200, bigBlind: 400 },
+  { smallBlind: 300, bigBlind: 600 },
+  { smallBlind: 400, bigBlind: 800 },
+  { smallBlind: 500, bigBlind: 1000 },
+  { smallBlind: 700, bigBlind: 1400 },
+  { smallBlind: 1000, bigBlind: 2000 },
+];
 
 function resolveTickInterval(playbackSpeedMs: number): number {
   return Math.max(100, Math.min(playbackSpeedMs, 5000));
@@ -25,6 +45,104 @@ function clearRunner(matchId: string): void {
     activeIntervals.delete(matchId);
   }
   inFlightTicks.delete(matchId);
+  engines.delete(matchId);
+}
+
+function getOrCreateEngine(matchId: string, seed: string, startingStack: number): HandEngine {
+  let engine = engines.get(matchId);
+
+  if (!engine) {
+    engine = new HandEngine({
+      matchSeed: seed,
+      startingStack,
+      blindLevels: BLIND_LEVELS,
+      handsPerLevel: HANDS_PER_LEVEL,
+    });
+
+    engines.set(matchId, engine);
+  }
+
+  return engine;
+}
+
+async function syncStacksFromSnapshot(
+  matchId: string,
+  snapshot: ReturnType<HandEngine["getSnapshot"]>,
+) {
+  if (!snapshot) {
+    return;
+  }
+
+  await prisma.$transaction(
+    snapshot.seats.map((seat) =>
+      prisma.matchSeat.updateMany({
+        where: {
+          matchId,
+          seatIndex: seat.seatIndex,
+        },
+        data: {
+          stack: seat.stack,
+          isEliminated: seat.stack <= 0,
+        },
+      }),
+    ),
+  );
+}
+
+async function finalizeMatch(matchId: string) {
+  const seats = await prisma.matchSeat.findMany({
+    where: { matchId },
+    orderBy: [{ stack: "desc" }, { seatIndex: "asc" }],
+  });
+
+  const updates = seats.map((seat, index) =>
+    prisma.matchSeat.update({
+      where: { id: seat.id },
+      data: { finishPlace: index + 1 },
+    }),
+  );
+
+  await prisma.$transaction([
+    ...updates,
+    prisma.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.completed,
+        completedAt: new Date(),
+      },
+    }),
+  ]);
+
+  const completed = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: {
+      seats: {
+        orderBy: { seatIndex: "asc" },
+        include: {
+          agent: {
+            select: {
+              id: true,
+              name: true,
+              provider: true,
+              modelId: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (completed) {
+    await recordAndPublishMatchEvent({
+      type: "match.completed",
+      matchId,
+      payload: {
+        summary: serializeMatchSummary(completed),
+      },
+    });
+  }
+
+  clearRunner(matchId);
 }
 
 async function tickMatch(matchId: string): Promise<void> {
@@ -47,6 +165,10 @@ async function tickMatch(matchId: string): Promise<void> {
                 name: true,
                 provider: true,
                 modelId: true,
+                systemPrompt: true,
+                encryptedKey: true,
+                keySalt: true,
+                keyIv: true,
               },
             },
           },
@@ -64,15 +186,107 @@ async function tickMatch(matchId: string): Promise<void> {
       return;
     }
 
-    const nextHand = match.currentHandNumber + 1;
-    const nextLevelIndex = Math.floor(nextHand / HANDS_PER_LEVEL);
+    const activeSeats = match.seats.map((seat) => ({
+      seatIndex: seat.seatIndex,
+      stack: seat.stack,
+      isEliminated: seat.isEliminated,
+    }));
 
-    const updated = await prisma.match.update({
-      where: { id: match.id },
-      data: {
-        currentHandNumber: nextHand,
-        currentLevelIndex: nextLevelIndex,
+    const handNumber = Math.max(1, match.currentHandNumber || 1);
+    if (match.currentHandNumber !== handNumber) {
+      await prisma.match.update({
+        where: { id: match.id },
+        data: { currentHandNumber: handNumber },
+      });
+    }
+
+    const engine = getOrCreateEngine(matchId, match.seed, match.startingStack);
+    const step = engine.nextDecision(activeSeats, handNumber);
+
+    if (step.type === "hand_complete") {
+      await prisma.$transaction(
+        step.hand.updatedStacks.map((seat) =>
+          prisma.matchSeat.updateMany({
+            where: { matchId, seatIndex: seat.seatIndex },
+            data: {
+              stack: seat.stack,
+              isEliminated: seat.isEliminated,
+            },
+          }),
+        ),
+      );
+
+      await finalizeMatch(matchId);
+      return;
+    }
+
+    await syncStacksFromSnapshot(matchId, engine.getSnapshot());
+
+    const actorSeat = match.seats.find((seat) => seat.seatIndex === step.hand.actorSeatIndex);
+    if (!actorSeat) {
+      throw new Error("Actor seat not found in match snapshot.");
+    }
+
+    const actorRuntimeSeat = step.hand.seats.find(
+      (seat) => seat.seatIndex === step.hand.actorSeatIndex,
+    );
+    if (!actorRuntimeSeat) {
+      throw new Error("Actor seat not found in engine snapshot.");
+    }
+
+    const level = BLIND_LEVELS[Math.min(match.currentLevelIndex, BLIND_LEVELS.length - 1)];
+
+    const decision = await resolveAgentDecision({
+      agent: actorSeat.agent,
+      seat: {
+        stack: actorRuntimeSeat.stack,
       },
+      context: {
+        matchId,
+        handNumber: step.hand.handNumber,
+        levelIndex: match.currentLevelIndex,
+        smallBlind: level.smallBlind,
+        bigBlind: level.bigBlind,
+        actorSeatIndex: step.hand.actorSeatIndex,
+        seats: step.hand.seats.map((seat) => ({
+          seatIndex: seat.seatIndex,
+          stack: seat.stack,
+          isEliminated: seat.folded,
+          contribution: seat.contribution,
+        })),
+        actionsThisHand: step.hand.actionsThisHand.map((action) => ({
+          seatIndex: action.seatIndex,
+          action: action.action,
+          amount: action.amount,
+        })),
+        legal: step.hand.legal,
+      },
+    });
+
+    const applyResult = engine.applyDecision(decision.decision);
+
+    await prisma.matchAction.create({
+      data: {
+        matchId,
+        handNumber: step.hand.handNumber,
+        street: step.hand.street,
+        actorSeatIndex: step.hand.actorSeatIndex,
+        legalActionsJson: JSON.stringify(step.hand.legal),
+        requestedActionJson: decision.requestedActionJson,
+        resolvedActionJson: decision.resolvedActionJson,
+        rawResponse: decision.rawResponse,
+        validationError: decision.validationError,
+        retried: decision.retried,
+        latencyMs: decision.latencyMs,
+        tokenUsageJson: decision.tokenUsageJson,
+        agentId: actorSeat.agentId,
+      },
+    });
+
+    await syncStacksFromSnapshot(matchId, engine.getSnapshot());
+
+    const refreshed = await prisma.match.findUnique({
+      where: { id: match.id },
       include: {
         seats: {
           orderBy: { seatIndex: "asc" },
@@ -90,50 +304,78 @@ async function tickMatch(matchId: string): Promise<void> {
       },
     });
 
-    publishMatchEvent({
+    if (!refreshed) {
+      clearRunner(matchId);
+      return;
+    }
+
+    await recordAndPublishMatchEvent({
       type: "match.state",
       matchId,
       payload: {
-        handNumber: updated.currentHandNumber,
-        levelIndex: updated.currentLevelIndex,
-        status: updated.status,
-        summary: serializeMatchSummary(updated),
+        handNumber: step.hand.handNumber,
+        levelIndex: refreshed.currentLevelIndex,
+        status: refreshed.status,
+        actorSeatIndex: step.hand.actorSeatIndex,
+        action: decision.decision,
+        board: engine.getSnapshot()?.board ?? step.hand.board,
+        street: engine.getSnapshot()?.street ?? step.hand.street,
+        summary: serializeMatchSummary(refreshed),
       },
     });
 
-    if (nextHand >= MAX_SIM_HANDS) {
-      const completed = await prisma.match.update({
+    if (applyResult.handComplete) {
+      const resolvedHand = engine.finalizeCurrentHand();
+
+      await prisma.$transaction(
+        resolvedHand.updatedStacks.map((seat) =>
+          prisma.matchSeat.updateMany({
+            where: { matchId, seatIndex: seat.seatIndex },
+            data: {
+              stack: seat.stack,
+              isEliminated: seat.isEliminated,
+            },
+          }),
+        ),
+      );
+
+      const nextHand = step.hand.handNumber + 1;
+      const nextLevelIndex = Math.floor((nextHand - 1) / HANDS_PER_LEVEL);
+
+      await prisma.match.update({
         where: { id: match.id },
         data: {
-          status: MatchStatus.completed,
-          completedAt: new Date(),
-        },
-        include: {
-          seats: {
-            orderBy: { seatIndex: "asc" },
-            include: {
-              agent: {
-                select: {
-                  id: true,
-                  name: true,
-                  provider: true,
-                  modelId: true,
-                },
-              },
-            },
-          },
+          currentHandNumber: nextHand,
+          currentLevelIndex: nextLevelIndex,
         },
       });
 
-      publishMatchEvent({
-        type: "match.completed",
+      await recordAndPublishMatchEvent({
+        type: "match.state",
         matchId,
         payload: {
-          summary: serializeMatchSummary(completed),
+          handNumber: resolvedHand.handNumber,
+          street: "showdown",
+          board: resolvedHand.board,
+          winners: resolvedHand.winners,
         },
       });
 
-      clearRunner(matchId);
+      if (nextHand > MAX_SIM_HANDS) {
+        await finalizeMatch(matchId);
+        return;
+      }
+
+      const remainingSeats = await prisma.matchSeat.findMany({
+        where: {
+          matchId,
+          isEliminated: false,
+        },
+      });
+
+      if (remainingSeats.length <= 1) {
+        await finalizeMatch(matchId);
+      }
     }
   } finally {
     inFlightTicks.delete(matchId);
@@ -189,6 +431,10 @@ export async function startMatchRunner(matchId: string): Promise<{
               name: true,
               provider: true,
               modelId: true,
+                systemPrompt: true,
+                encryptedKey: true,
+                keySalt: true,
+                keyIv: true,
             },
           },
         },
@@ -196,7 +442,7 @@ export async function startMatchRunner(matchId: string): Promise<{
     },
   });
 
-  publishMatchEvent({
+  await recordAndPublishMatchEvent({
     type: "match.started",
     matchId,
     payload: {
@@ -234,6 +480,10 @@ export async function getMatchRuntimeState(matchId: string) {
               name: true,
               provider: true,
               modelId: true,
+                systemPrompt: true,
+                encryptedKey: true,
+                keySalt: true,
+                keyIv: true,
             },
           },
         },
