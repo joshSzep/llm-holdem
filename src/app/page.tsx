@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 import { AgentManager } from "@/components/agents/agent-manager";
 import { LockButton } from "@/components/bootstrap/lock-button";
 import { SetupForm } from "@/components/bootstrap/setup-form";
@@ -5,8 +9,11 @@ import { UnlockForm } from "@/components/bootstrap/unlock-form";
 import { MatchManager } from "@/components/matches/match-manager";
 import { LeaderboardPanel } from "@/components/leaderboard/leaderboard-panel";
 import { AnalyticsPanel } from "@/components/analytics/analytics-panel";
-import { prisma } from "@/lib/prisma";
-import { isUnlocked } from "@/lib/security/unlock-session";
+
+type BootstrapStatus = {
+  initialized: boolean;
+  unlocked: boolean;
+};
 
 function Card({
   title,
@@ -26,14 +33,87 @@ function Card({
   );
 }
 
-export default async function Home() {
-  const secret = await prisma.appSecret.findUnique({
-    where: { id: "singleton" },
-  });
-  const initialized = Boolean(secret);
-  const unlocked = isUnlocked();
+export default function Home() {
+  const [status, setStatus] = useState<BootstrapStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
-  if (!initialized) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStatus() {
+      try {
+        const response = await fetch("/api/bootstrap/status", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to load bootstrap status.");
+        }
+
+        const body = (await response.json()) as BootstrapStatus;
+
+        if (cancelled) {
+          return;
+        }
+
+        setStatus({
+          initialized: Boolean(body.initialized),
+          unlocked: Boolean(body.unlocked),
+        });
+        setStatusError(null);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setStatusError("Unable to load app status.");
+      }
+    }
+
+    void loadStatus();
+    const intervalId = window.setInterval(() => {
+      void loadStatus();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  if (statusError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-zinc-900 p-6 font-sans">
+        <Card
+          title="LLM Hold’em"
+          description={statusError}
+        >
+          <button
+            className="inline-flex w-full items-center justify-center rounded-md bg-zinc-100 px-3 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200"
+            onClick={() => window.location.reload()}
+            type="button"
+          >
+            Retry
+          </button>
+        </Card>
+      </main>
+    );
+  }
+
+  if (!status) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-zinc-900 p-6 font-sans">
+        <Card
+          title="LLM Hold’em"
+          description="Loading app status..."
+        >
+          <p className="text-sm text-zinc-400">Checking initialization and unlock state.</p>
+        </Card>
+      </main>
+    );
+  }
+
+  if (!status.initialized) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-900 p-6 font-sans">
         <Card
@@ -46,7 +126,7 @@ export default async function Home() {
     );
   }
 
-  if (!unlocked) {
+  if (!status.unlocked) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-900 p-6 font-sans">
         <Card
