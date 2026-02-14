@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import type { SupportedProvider } from "@/lib/llm/curated-models";
 import { MatchEventsFeed } from "@/components/matches/match-events-feed";
@@ -36,6 +36,13 @@ type TimelineEvent = {
   eventType: string;
   payload: Record<string, unknown>;
   createdAt: string;
+};
+
+type MatchEvent = {
+  type: string;
+  matchId: string;
+  timestamp: string;
+  payload: Record<string, unknown>;
 };
 
 type ReplaySeatView = {
@@ -96,6 +103,30 @@ function asStringArray(value: unknown): string[] {
   }
 
   return value.filter((item): item is string => typeof item === "string");
+}
+
+function formatCard(card: string): { label: string; isRed: boolean } {
+  if (!card) {
+    return { label: "?", isRed: false };
+  }
+
+  const suit = card.slice(-1).toLowerCase();
+  const rank = card.slice(0, -1).toUpperCase();
+  const suitSymbol =
+    suit === "h"
+      ? "♥"
+      : suit === "d"
+        ? "♦"
+        : suit === "c"
+          ? "♣"
+          : suit === "s"
+            ? "♠"
+            : "?";
+
+  return {
+    label: `${rank}${suitSymbol}`,
+    isRed: suit === "h" || suit === "d",
+  };
 }
 
 function buildReplayState(event: TimelineEvent): ReplayStateView {
@@ -258,6 +289,8 @@ export function MatchManager() {
   const [timelineMatchId, setTimelineMatchId] = useState<string | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [timelineIndex, setTimelineIndex] = useState<number>(-1);
+  const [watchedMatchId, setWatchedMatchId] = useState<string | null>(null);
+  const liveSyncAtRef = useRef(0);
 
   const selectedCount = selectedAgentIds.length;
   const canSubmit = selectedCount === 6 && !submitting;
@@ -488,6 +521,29 @@ export function MatchManager() {
       : null;
   const replayState = timelineCurrent ? buildReplayState(timelineCurrent) : null;
 
+  function onLiveMatchEvent(event: MatchEvent) {
+    if (!watchedMatchId || event.matchId !== watchedMatchId) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - liveSyncAtRef.current < 400) {
+      return;
+    }
+
+    liveSyncAtRef.current = now;
+    void refreshTimeline(watchedMatchId);
+
+    if (
+      event.type === "match.started" ||
+      event.type === "match.completed" ||
+      event.type === "match.paused" ||
+      event.type === "match.resumed"
+    ) {
+      void refreshData();
+    }
+  }
+
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-6">
       <div className="flex flex-col gap-2">
@@ -663,6 +719,21 @@ export function MatchManager() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => {
+                        setWatchedMatchId(match.id);
+                        setEventMatchFilter(match.id);
+                        void refreshTimeline(match.id);
+                      }}
+                      className={`rounded-md border px-2.5 py-1 text-xs transition ${
+                        watchedMatchId === match.id
+                          ? "border-emerald-700 bg-emerald-900/40 text-emerald-200"
+                          : "border-emerald-900 text-emerald-300 hover:bg-emerald-950/50"
+                      }`}
+                    >
+                      {watchedMatchId === match.id ? "Watching" : "Watch live"}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void onStartMatch(match.id)}
                       disabled={
                         startingMatchId === match.id ||
@@ -713,15 +784,20 @@ export function MatchManager() {
       </div>
 
       <div className="mt-8">
-        <MatchEventsFeed selectedMatchId={eventMatchFilter} />
+        <MatchEventsFeed selectedMatchId={eventMatchFilter} onMatchEvent={onLiveMatchEvent} />
       </div>
 
       <div className="mt-8 rounded-xl border border-zinc-800 bg-zinc-950 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-medium">Replay timeline</h2>
-          <p className="text-xs text-zinc-500">
-            {timelineMatchId ? `match ${timelineMatchId}` : "Select Replay on a match"}
-          </p>
+          <div className="text-right text-xs text-zinc-500">
+            <p>{timelineMatchId ? `match ${timelineMatchId}` : "Select Replay on a match"}</p>
+            <p>
+              {watchedMatchId
+                ? `auto-follow live: ${watchedMatchId}`
+                : "auto-follow live: off"}
+            </p>
+          </div>
         </div>
 
         <div className="mt-3 flex items-center gap-2">
@@ -789,63 +865,81 @@ export function MatchManager() {
               </div>
             </div>
 
-            <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">Board</p>
-              {replayState?.board.length ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {replayState.board.map((card, index) => (
-                    <span
-                      key={`${card}-${index}`}
-                      className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200"
-                    >
-                      {card}
-                    </span>
-                  ))}
+            <div className="mt-3 rounded-xl border border-zinc-800 bg-gradient-to-b from-emerald-900/30 via-emerald-950/20 to-zinc-900 p-4">
+              <div className="mx-auto max-w-3xl rounded-[999px] border border-emerald-800/60 bg-emerald-950/40 px-6 py-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-300">
+                  <span className="rounded border border-zinc-700 bg-zinc-950/70 px-2 py-1">
+                    Pot: {replayState?.pot ?? "—"}
+                  </span>
+                  <span className="rounded border border-zinc-700 bg-zinc-950/70 px-2 py-1">
+                    Action: {replayState?.actionLabel ?? "—"}
+                  </span>
                 </div>
-              ) : (
-                <p className="mt-2 text-xs text-zinc-500">No board cards revealed.</p>
-              )}
-            </div>
 
-            <div className="mt-3 overflow-x-auto rounded-md border border-zinc-800">
-              <table className="w-full min-w-[620px] text-left text-xs">
-                <thead className="bg-zinc-900/80 uppercase tracking-wide text-zinc-500">
-                  <tr>
-                    <th className="px-3 py-2">Seat</th>
-                    <th className="px-3 py-2">Agent</th>
-                    <th className="px-3 py-2">Stack</th>
-                    <th className="px-3 py-2">Contrib</th>
-                    <th className="px-3 py-2">State</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(replayState?.seats ?? []).map((seat) => {
-                    const isActor = replayState?.actorSeatIndex === seat.seatIndex;
-                    const status = seat.folded
-                      ? "folded"
-                      : seat.allIn
-                        ? "all-in"
-                        : seat.isEliminated
-                          ? "eliminated"
-                          : "active";
+                <div className="mt-4">
+                  <p className="text-center text-xs uppercase tracking-wide text-zinc-400">Board</p>
+                  {replayState?.board.length ? (
+                    <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                      {replayState.board.map((card, index) => {
+                        const formatted = formatCard(card);
+                        return (
+                          <span
+                            key={`${card}-${index}`}
+                            className={`inline-flex h-10 w-9 items-center justify-center rounded border border-zinc-700 bg-zinc-50 text-sm font-semibold ${
+                              formatted.isRed ? "text-rose-600" : "text-zinc-900"
+                            }`}
+                          >
+                            {formatted.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-center text-xs text-zinc-500">No board cards revealed.</p>
+                  )}
+                </div>
+              </div>
 
-                    return (
-                      <tr
-                        key={`${timelineCurrent.id}-${seat.seatIndex}`}
-                        className={`border-t border-zinc-800 text-zinc-300 ${
-                          isActor ? "bg-zinc-800/50" : ""
-                        }`}
-                      >
-                        <td className="px-3 py-2">{seat.seatIndex + 1}</td>
-                        <td className="px-3 py-2">{seat.name ?? "—"}</td>
-                        <td className="px-3 py-2">{seat.stack ?? "—"}</td>
-                        <td className="px-3 py-2">{seat.contribution ?? "—"}</td>
-                        <td className="px-3 py-2">{status}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {(replayState?.seats ?? []).map((seat) => {
+                  const isActor = replayState?.actorSeatIndex === seat.seatIndex;
+                  const status = seat.folded
+                    ? "folded"
+                    : seat.allIn
+                      ? "all-in"
+                      : seat.isEliminated
+                        ? "eliminated"
+                        : "active";
+
+                  return (
+                    <div
+                      key={`${timelineCurrent.id}-${seat.seatIndex}`}
+                      className={`rounded-lg border p-3 text-xs ${
+                        isActor
+                          ? "border-amber-500/70 bg-amber-900/20"
+                          : "border-zinc-800 bg-zinc-950/60"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-zinc-100">Seat {seat.seatIndex + 1}</p>
+                        <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-300">
+                          {status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-zinc-300">{seat.name ?? "—"}</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-zinc-400">
+                        <span>Stack: {seat.stack ?? "—"}</span>
+                        <span>Contrib: {seat.contribution ?? "—"}</span>
+                      </div>
+                      {isActor ? (
+                        <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-amber-300">
+                          Acting now
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {replayState?.winners.length ? (

@@ -9,7 +9,13 @@ type MatchEvent = {
   payload: Record<string, unknown>;
 };
 
-export function MatchEventsFeed({ selectedMatchId }: { selectedMatchId?: string }) {
+export function MatchEventsFeed({
+  selectedMatchId,
+  onMatchEvent,
+}: {
+  selectedMatchId?: string;
+  onMatchEvent?: (event: MatchEvent) => void;
+}) {
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [connected, setConnected] = useState(false);
 
@@ -43,6 +49,7 @@ export function MatchEventsFeed({ selectedMatchId }: { selectedMatchId?: string 
           return;
         }
 
+        onMatchEvent?.(parsed);
         setEvents((current) => [parsed, ...current].slice(0, 25));
       } catch {
         // ignore malformed event payloads
@@ -52,7 +59,7 @@ export function MatchEventsFeed({ selectedMatchId }: { selectedMatchId?: string 
     return () => {
       socket.close();
     };
-  }, [selectedMatchId]);
+  }, [onMatchEvent, selectedMatchId]);
 
   const statusText = useMemo(
     () => (connected ? "Live websocket connected" : "Websocket disconnected"),
@@ -82,12 +89,15 @@ export function MatchEventsFeed({ selectedMatchId }: { selectedMatchId?: string 
               key={`${event.timestamp}-${event.type}-${index}`}
               className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3"
             >
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-300">
-                {event.type}
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">
-                match: {event.matchId} · {new Date(event.timestamp).toLocaleTimeString()}
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-300">
+                  {event.type}
+                </p>
+                <span className="rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[10px] text-zinc-400">
+                  {new Date(event.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">match: {event.matchId}</p>
             </li>
           ))}
         </ul>
