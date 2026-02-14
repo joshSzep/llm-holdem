@@ -122,6 +122,7 @@ export class HandEngine {
 
   private handState: RuntimeHandState | null = null;
   private buttonSeatIndex = -1;
+  private tableSeatOrder: number[] = [];
 
   constructor(options: {
     matchSeed: string;
@@ -140,41 +141,97 @@ export class HandEngine {
     return this.blindLevels[Math.min(levelIndex, this.blindLevels.length - 1)];
   }
 
-  private nextActiveSeat(activeSeats: SeatSnapshot[], fromSeatIndex: number): SeatSnapshot {
-    const sorted = [...activeSeats].sort((a, b) => a.seatIndex - b.seatIndex);
-    const higher = sorted.find((seat) => seat.seatIndex > fromSeatIndex);
+  private ensureTableSeatOrder(activeSeats: SeatSnapshot[]): void {
+    const merged = new Set<number>(this.tableSeatOrder);
+    for (const seat of activeSeats) {
+      merged.add(seat.seatIndex);
+    }
+    this.tableSeatOrder = [...merged].sort((a, b) => a - b);
+  }
 
-    if (higher) {
-      return higher;
+  private nextPhysicalSeatIndex(fromSeatIndex: number): number {
+    if (this.tableSeatOrder.length === 0) {
+      throw new Error("Table seat order is empty.");
     }
 
-    return sorted[0];
+    if (fromSeatIndex < 0 || !this.tableSeatOrder.includes(fromSeatIndex)) {
+      return this.tableSeatOrder[0];
+    }
+
+    const currentIndex = this.tableSeatOrder.indexOf(fromSeatIndex);
+    const nextIndex = (currentIndex + 1) % this.tableSeatOrder.length;
+    return this.tableSeatOrder[nextIndex];
+  }
+
+  private nextActiveSeatIndex(fromSeatIndex: number, activeSeatSet: Set<number>): number {
+    if (activeSeatSet.size === 0) {
+      throw new Error("No active seats available.");
+    }
+
+    let cursor = fromSeatIndex;
+
+    for (let i = 0; i < this.tableSeatOrder.length; i += 1) {
+      cursor = this.nextPhysicalSeatIndex(cursor);
+      if (activeSeatSet.has(cursor)) {
+        return cursor;
+      }
+    }
+
+    throw new Error("Failed to resolve next active seat.");
+  }
+
+  private buildActionOrder(startAfterSeatIndex: number, activeSeatSet: Set<number>): number[] {
+    const order: number[] = [];
+    let cursor = startAfterSeatIndex;
+
+    for (let i = 0; i < activeSeatSet.size; i += 1) {
+      const next = this.nextActiveSeatIndex(cursor, activeSeatSet);
+      order.push(next);
+      cursor = next;
+    }
+
+    return order;
+  }
+
+  private orderSeatIndexesClockwiseFrom(
+    startAfterSeatIndex: number,
+    seatIndexes: number[],
+  ): number[] {
+    const remaining = new Set(seatIndexes);
+    const ordered: number[] = [];
+    let cursor = startAfterSeatIndex;
+
+    for (let i = 0; i < this.tableSeatOrder.length && remaining.size > 0; i += 1) {
+      cursor = this.nextPhysicalSeatIndex(cursor);
+      if (remaining.has(cursor)) {
+        ordered.push(cursor);
+        remaining.delete(cursor);
+      }
+    }
+
+    return ordered;
   }
 
   private initializeHand(activeSeats: SeatSnapshot[], handNumber: number): RuntimeHandState {
+    this.ensureTableSeatOrder(activeSeats);
+
     const sortedSeats = [...activeSeats].sort((a, b) => a.seatIndex - b.seatIndex);
+    const activeSeatSet = new Set(sortedSeats.map((seat) => seat.seatIndex));
 
-    const buttonSeat = this.nextActiveSeat(sortedSeats, this.buttonSeatIndex);
-    this.buttonSeatIndex = buttonSeat.seatIndex;
+    const isHeadsUp = sortedSeats.length === 2;
 
-    const smallBlindSeat = this.nextActiveSeat(sortedSeats, buttonSeat.seatIndex);
-    const bigBlindSeat = this.nextActiveSeat(sortedSeats, smallBlindSeat.seatIndex);
+    const buttonSeatIndex = isHeadsUp
+      ? this.nextActiveSeatIndex(this.buttonSeatIndex, activeSeatSet)
+      : this.nextPhysicalSeatIndex(this.buttonSeatIndex);
+    this.buttonSeatIndex = buttonSeatIndex;
 
-    const preflopOrder: number[] = [];
-    let cursor = bigBlindSeat.seatIndex;
-    for (let i = 0; i < sortedSeats.length; i += 1) {
-      const next = this.nextActiveSeat(sortedSeats, cursor);
-      preflopOrder.push(next.seatIndex);
-      cursor = next.seatIndex;
-    }
+    const smallBlindSeatIndex = isHeadsUp
+      ? buttonSeatIndex
+      : this.nextActiveSeatIndex(buttonSeatIndex, activeSeatSet);
+    const bigBlindSeatIndex = this.nextActiveSeatIndex(smallBlindSeatIndex, activeSeatSet);
 
-    const flopOrder: number[] = [];
-    cursor = buttonSeat.seatIndex;
-    for (let i = 0; i < sortedSeats.length; i += 1) {
-      const next = this.nextActiveSeat(sortedSeats, cursor);
-      flopOrder.push(next.seatIndex);
-      cursor = next.seatIndex;
-    }
+    const preflopOrder = this.buildActionOrder(bigBlindSeatIndex, activeSeatSet);
+    const flopOrder = this.buildActionOrder(buttonSeatIndex, activeSeatSet);
 
     const deck = shuffleDeckWithSeed(`${this.matchSeed}:${handNumber}`);
     const players = new Map<number, PlayerState>();
@@ -200,12 +257,12 @@ export class HandEngine {
 
     const blindLevel = this.getBlindLevel(handNumber);
 
-    this.postBlind(players, smallBlindSeat.seatIndex, blindLevel.smallBlind);
-    this.postBlind(players, bigBlindSeat.seatIndex, blindLevel.bigBlind);
+    this.postBlind(players, smallBlindSeatIndex, blindLevel.smallBlind);
+    this.postBlind(players, bigBlindSeatIndex, blindLevel.bigBlind);
 
     return {
       handNumber,
-      buttonSeatIndex: buttonSeat.seatIndex,
+      buttonSeatIndex,
       street: "preflop",
       board: [],
       deck,
@@ -367,7 +424,10 @@ export class HandEngine {
       const base = Math.floor(potAmount / winnerSeats.length);
       let remainder = potAmount % winnerSeats.length;
 
-      const orderedWinners = [...winnerSeats].sort((a, b) => a - b);
+      const orderedWinners = this.orderSeatIndexesClockwiseFrom(
+        state.buttonSeatIndex,
+        winnerSeats,
+      );
       for (const seatIndex of orderedWinners) {
         const extra = remainder > 0 ? 1 : 0;
         remainder = Math.max(0, remainder - 1);
