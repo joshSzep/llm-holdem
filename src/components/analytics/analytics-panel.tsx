@@ -98,6 +98,7 @@ export function AnalyticsPanel() {
   const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [exportedJson, setExportedJson] = useState(false);
+  const [exportedCsv, setExportedCsv] = useState(false);
 
   const refreshAnalytics = useCallback(async () => {
     setLoading(true);
@@ -223,6 +224,72 @@ export function AnalyticsPanel() {
     setExportedJson(true);
     setTimeout(() => {
       setExportedJson(false);
+    }, 1500);
+  }
+
+  function escapeCsv(value: string): string {
+    const escaped = value.replaceAll('"', '""');
+    return `"${escaped}"`;
+  }
+
+  function exportVisibleInvalidAsCsv() {
+    if (!analytics) {
+      return;
+    }
+
+    const visible = analytics.recentInvalidDecisions;
+    if (visible.length === 0) {
+      setError("No visible invalid decisions to export.");
+      return;
+    }
+
+    const header = [
+      "createdAt",
+      "matchId",
+      "handNumber",
+      "street",
+      "actorSeatIndex",
+      "category",
+      "message",
+      "validationError",
+      "agentName",
+      "agentProvider",
+      "agentModelId",
+      "rawResponse",
+    ];
+
+    const rows = visible.map((row) => [
+      row.createdAt,
+      row.matchId,
+      String(row.handNumber),
+      row.street,
+      String(row.actorSeatIndex),
+      row.category,
+      row.message ?? "",
+      row.validationError ?? "",
+      row.agent?.name ?? "",
+      row.agent?.provider ?? "",
+      row.agent?.modelId ?? "",
+      row.rawResponse,
+    ]);
+
+    const csv = [header, ...rows]
+      .map((columns) => columns.map((value) => escapeCsv(value)).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `invalid-decisions-${categoryFilter}-${Date.now()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+
+    setExportedCsv(true);
+    setTimeout(() => {
+      setExportedCsv(false);
     }, 1500);
   }
 
@@ -367,6 +434,13 @@ export function AnalyticsPanel() {
                   className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 transition hover:bg-zinc-800"
                 >
                   {exportedJson ? "exported" : "export json"}
+                </button>
+                <button
+                  type="button"
+                  onClick={exportVisibleInvalidAsCsv}
+                  className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  {exportedCsv ? "exported" : "export csv"}
                 </button>
               </div>
             </div>
