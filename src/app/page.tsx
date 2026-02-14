@@ -2,6 +2,7 @@ import { AgentManager } from "@/components/agents/agent-manager";
 import { LockButton } from "@/components/bootstrap/lock-button";
 import { SetupForm } from "@/components/bootstrap/setup-form";
 import { UnlockForm } from "@/components/bootstrap/unlock-form";
+import { MatchManager } from "@/components/matches/match-manager";
 import { prisma } from "@/lib/prisma";
 import { isUnlocked } from "@/lib/security/unlock-session";
 
@@ -77,6 +78,7 @@ export default async function Home() {
         </header>
 
         <AgentManager />
+        <MatchManager />
       </section>
     </main>
   );
