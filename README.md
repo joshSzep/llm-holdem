@@ -96,6 +96,14 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 
 	This stress-checks side-pot/showdown invariants, tier payout consistency, and chip conservation across randomized and forced all-in scenarios.
 
+7. Run deterministic replay regression verification:
+
+	```bash
+	pnpm verify:determinism
+	```
+
+	This runs fixed-seed simulations twice and fails if timeline fingerprints drift between runs.
+
 ## Using `just`
 
 This repository includes a root `justfile` for common workflows.
