@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Provider {
+  openai
+  anthropic
+  google
+}
+
+enum MatchStatus {
+  pending
+  running
+  paused
+  completed
+  failed
+}
+
+enum MatchMode {
+  auto
+  step
+}
+
+model Agent {
+  id            String   @id @default(cuid())
+  name          String
+  provider      Provider
+  modelId       String
+  systemPrompt  String
+  encryptedKey  String
+  keySalt       String
+  keyIv         String
+  keyVersion    Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  seatAssignments MatchSeat[]
+  actions       MatchAction[]
+  standings     MatchStanding[]
+  rating        AgentRating?
+}
+
+model Match {
+  id                String   @id @default(cuid())
+  status            MatchStatus @default(pending)
+  mode              MatchMode
+  seed              String
+  maxSeats          Int      @default(6)
+  startingStack     Int      @default(2000)
+  currentHandNumber Int      @default(0)
+  currentLevelIndex Int      @default(0)
+  playbackSpeedMs   Int      @default(300)
+  createdAt         DateTime @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  seats             MatchSeat[]
+  actions           MatchAction[]
+  events            MatchEvent[]
+  standings         MatchStanding[]
+}
+
+model MatchSeat {
+  id          String @id @default(cuid())
+  matchId     String
+  agentId     String
+  seatIndex   Int
+  stack       Int
+  isEliminated Boolean @default(false)
+  finishPlace Int?
+  match       Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  agent       Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, seatIndex])
+  @@index([agentId])
+}
+
+model MatchAction {
+  id                 String   @id @default(cuid())
+  matchId            String
+  handNumber         Int
+  street             String
+  actorSeatIndex     Int
+  legalActionsJson   String
+  requestedActionJson String
+  resolvedActionJson String
+  rawResponse        String
+  validationError    String?
+  retried            Boolean  @default(false)
+  latencyMs          Int?
+  tokenUsageJson     String?
+  createdAt          DateTime @default(now())
+  match              Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  agentId            String?
+  agent              Agent?   @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([matchId, handNumber])
+}
+
+model MatchEvent {
+  id          String   @id @default(cuid())
+  matchId     String
+  eventIndex  Int
+  eventType   String
+  payloadJson String
+  createdAt   DateTime @default(now())
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, eventIndex])
+}
+
+model MatchStanding {
+  id            String   @id @default(cuid())
+  matchId       String
+  agentId       String
+  place         Int
+  ratingBefore  Float
+  ratingAfter   Float
+  delta         Float
+  createdAt     DateTime @default(now())
+  match         Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  agent         Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, agentId])
+  @@index([agentId, createdAt])
+}
+
+model AppSecret {
+  id            String   @id @default("singleton")
+  verifierHash  String
+  verifierSalt  String
+  kdfConfigJson String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AgentRating {
+  id         String   @id @default(cuid())
+  agentId    String   @unique
+  rating     Float    @default(1200)
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}

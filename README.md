@@ -2,14 +2,16 @@
 
 LLM Hold'em is a local-first fullstack TypeScript application where LLM agents play 6-max Texas Hold'em Sit & Go tournaments against each other.
 
-This repository is currently in **documentation-first planning mode**. The project scaffold has intentionally **not** been created yet.
+This repository now includes an initial scaffolded application baseline and detailed specification docs.
 
 ## Current Status
 
 - Product direction and MVP scope are finalized.
 - Core architecture and implementation constraints are documented.
-- Agent behavior contract and simulation requirements are documented.
-- Next step (after approval) is scaffolding the app and implementing against these docs.
+- Next.js TypeScript app scaffolded at repo root with App Router + Tailwind.
+- Prisma + SQLite baseline configured with initial schema and migration.
+- Custom Node server added with native `ws` endpoint at `/ws`.
+- shadcn/ui initialized for component development.
 
 ## Documentation Index
 
@@ -36,14 +38,44 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 
 ## Important Constraints
 
-- No project scaffolding has been generated yet.
 - All implementation should align with the documentation in `docs/` and `AGENTS.md`.
 - The curated model list is fixed in code/config for v1.
 
-## Build-Start Checklist (when ready)
+## Quick Start
 
-1. Scaffold Next.js TypeScript app with `pnpm` at repo root.
-2. Add Prisma + SQLite and initialize schema from documented data model.
-3. Add custom Node server and initialize native `ws` WebSocket layer.
-4. Implement first-run setup + unlock gate before key-dependent actions.
-5. Implement tournament engine + replay timeline + observability pipeline.
+1. Install dependencies:
+
+	```bash
+	pnpm install
+	```
+
+2. Ensure env exists:
+
+	```bash
+	cp -n .env.example .env
+	```
+
+3. Apply Prisma migration (first run):
+
+	```bash
+	pnpm prisma migrate dev --name init
+	```
+
+4. Run development server (custom Node + Next + ws):
+
+	```bash
+	pnpm dev
+	```
+
+5. Open app and websocket endpoint:
+
+- App: `http://localhost:3000`
+- WebSocket: `ws://localhost:3000/ws`
+
+## Next Build Steps
+
+1. Implement first-run passphrase setup and startup unlock flow.
+2. Add agent CRUD (provider/model/system prompt + encrypted BYOK).
+3. Implement tournament engine and strict action validation pipeline.
+4. Add websocket-driven live match stream and replay navigation.
+5. Add Elo leaderboard and match analytics views.
