@@ -11,6 +11,7 @@ type AnalyticsOverview = {
   retriedActions: number;
   invalidActions: number;
   invalidByCategory: Record<string, number>;
+  fallbackByReason: Record<string, number>;
   retryRate: number;
   invalidRate: number;
   tokenUsage: {
@@ -32,6 +33,7 @@ type MatchAnalyticsRow = {
   retries: number;
   invalidActions: number;
   invalidByCategory: Record<string, number>;
+  fallbackByReason: Record<string, number>;
   retryRate: number;
   invalidRate: number;
   tokenUsage: {
@@ -350,6 +352,9 @@ export function AnalyticsPanel() {
               <p className="text-xs text-zinc-500">
                 {formatCategorySummary(analytics.overview.invalidByCategory)}
               </p>
+              <p className="text-xs text-zinc-500">
+                fallback {formatCategorySummary(analytics.overview.fallbackByReason)}
+              </p>
             </div>
             <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-3 text-sm">
               <p className="text-zinc-400">Tokens</p>
@@ -371,6 +376,7 @@ export function AnalyticsPanel() {
                   <th className="px-3 py-2">Retries</th>
                   <th className="px-3 py-2">Invalid</th>
                   <th className="px-3 py-2">Error Mix</th>
+                  <th className="px-3 py-2">Fallback Mix</th>
                   <th className="px-3 py-2">Tokens</th>
                 </tr>
               </thead>
@@ -390,6 +396,7 @@ export function AnalyticsPanel() {
                       {match.invalidActions} ({formatRate(match.invalidRate)})
                     </td>
                     <td className="px-3 py-2">{formatCategorySummary(match.invalidByCategory)}</td>
+                    <td className="px-3 py-2">{formatCategorySummary(match.fallbackByReason)}</td>
                     <td className="px-3 py-2">{match.tokenUsage.total}</td>
                   </tr>
                 ))}

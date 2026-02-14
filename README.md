@@ -33,6 +33,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Invalid decision drilldown now supports exporting visible rows as JSON.
 - Invalid decision drilldown now supports exporting visible rows as CSV.
 - Provider decision runtime now uses timeout-guarded transport retries with backoff and explicit fallback reason codes.
+- Analytics now includes fallback-reason mix breakdown (for example transport-exhausted vs invalid-output-exhausted).
 
 ## Documentation Index
 

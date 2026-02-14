@@ -22,6 +22,29 @@ function parseValidationErrorCategory(validationError: string | null): string {
   return "legacy_unclassified";
 }
 
+function parseFallbackReason(requestedActionJson: string | null): string | null {
+  if (!requestedActionJson) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(requestedActionJson) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    const record = parsed as Record<string, unknown>;
+    if (record.action !== "forced_fallback") {
+      return null;
+    }
+
+    const reason = record.reason;
+    return typeof reason === "string" && reason.trim().length > 0 ? reason.trim() : "unknown";
+  } catch {
+    return null;
+  }
+}
+
 function stripValidationErrorCategory(validationError: string | null): string | null {
   if (!validationError) {
     return null;
@@ -129,6 +152,7 @@ export async function GET(request: Request) {
         latencyMs: true,
         retried: true,
         validationError: true,
+        requestedActionJson: true,
         tokenUsageJson: true,
       },
     }),
@@ -148,6 +172,7 @@ export async function GET(request: Request) {
             latencyMs: true,
             retried: true,
             validationError: true,
+            requestedActionJson: true,
             tokenUsageJson: true,
           },
         },
@@ -188,6 +213,7 @@ export async function GET(request: Request) {
   let totalOutputTokens = 0;
   let totalTokens = 0;
   const invalidByCategory: Record<string, number> = {};
+  const fallbackByReason: Record<string, number> = {};
   const latencyValues: number[] = [];
 
   for (const action of allActions) {
@@ -199,6 +225,11 @@ export async function GET(request: Request) {
       invalidActions += 1;
       const category = parseValidationErrorCategory(action.validationError);
       invalidByCategory[category] = (invalidByCategory[category] ?? 0) + 1;
+    }
+
+    const fallbackReason = parseFallbackReason(action.requestedActionJson);
+    if (fallbackReason) {
+      fallbackByReason[fallbackReason] = (fallbackByReason[fallbackReason] ?? 0) + 1;
     }
 
     if (typeof action.latencyMs === "number") {
@@ -220,6 +251,7 @@ export async function GET(request: Request) {
     let matchOutputTokens = 0;
     let matchTotalTokens = 0;
     const matchInvalidByCategory: Record<string, number> = {};
+    const matchFallbackByReason: Record<string, number> = {};
     const matchLatencies: number[] = [];
 
     for (const action of match.actions) {
@@ -231,6 +263,11 @@ export async function GET(request: Request) {
         matchInvalid += 1;
         const category = parseValidationErrorCategory(action.validationError);
         matchInvalidByCategory[category] = (matchInvalidByCategory[category] ?? 0) + 1;
+      }
+
+      const fallbackReason = parseFallbackReason(action.requestedActionJson);
+      if (fallbackReason) {
+        matchFallbackByReason[fallbackReason] = (matchFallbackByReason[fallbackReason] ?? 0) + 1;
       }
 
       if (typeof action.latencyMs === "number") {
@@ -259,6 +296,7 @@ export async function GET(request: Request) {
       retries: matchRetries,
       invalidActions: matchInvalid,
       invalidByCategory: matchInvalidByCategory,
+      fallbackByReason: matchFallbackByReason,
       retryRate: actionCount > 0 ? matchRetries / actionCount : 0,
       invalidRate: actionCount > 0 ? matchInvalid / actionCount : 0,
       tokenUsage: {
@@ -298,6 +336,7 @@ export async function GET(request: Request) {
       retriedActions,
       invalidActions,
       invalidByCategory,
+      fallbackByReason,
       retryRate: totalActions > 0 ? retriedActions / totalActions : 0,
       invalidRate: totalActions > 0 ? invalidActions / totalActions : 0,
       tokenUsage: {
