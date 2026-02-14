@@ -12,6 +12,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Prisma + SQLite baseline configured with initial schema and migration.
 - Custom Node server added with native `ws` endpoint at `/ws`.
 - shadcn/ui initialized for component development.
+- First-run passphrase setup and startup unlock gate are implemented.
 
 ## Documentation Index
 
@@ -102,8 +103,18 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 
 ## Next Build Steps
 
-1. Implement first-run passphrase setup and startup unlock flow.
-2. Add agent CRUD (provider/model/system prompt + encrypted BYOK).
-3. Implement tournament engine and strict action validation pipeline.
-4. Add websocket-driven live match stream and replay navigation.
-5. Add Elo leaderboard and match analytics views.
+1. Add agent CRUD (provider/model/system prompt + encrypted BYOK).
+2. Implement tournament engine and strict action validation pipeline.
+3. Add websocket-driven live match stream and replay navigation.
+4. Add Elo leaderboard and match analytics views.
+
+## Bootstrap Security Flow
+
+- On first launch, `/` shows a setup screen to create and confirm the master passphrase.
+- On subsequent launches (or after locking), `/` shows an unlock screen.
+- Unlock state is held in server memory for the process lifetime.
+- API endpoints:
+	- `GET /api/bootstrap/status`
+	- `POST /api/bootstrap/setup`
+	- `POST /api/bootstrap/unlock`
+	- `POST /api/bootstrap/lock`
