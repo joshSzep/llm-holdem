@@ -391,6 +391,40 @@ export class HandEngine {
   private settleHand(state: RuntimeHandState): ResolvedHand {
     const players = [...state.players.values()];
     const contenders = players.filter((player) => !player.folded);
+    const totalPot = players.reduce((sum, player) => sum + player.totalContribution, 0);
+
+    if (contenders.length === 1) {
+      const winnerSeatIndex = contenders[0].seatIndex;
+
+      return {
+        handNumber: state.handNumber,
+        board: [...state.board],
+        winners: [{ seatIndex: winnerSeatIndex, amountWon: totalPot }],
+        updatedStacks: players.map((player) => {
+          const won = player.seatIndex === winnerSeatIndex ? totalPot : 0;
+          const finalStack = player.stack + won;
+
+          return {
+            seatIndex: player.seatIndex,
+            stack: finalStack,
+            isEliminated: finalStack <= 0,
+          };
+        }),
+      };
+    }
+
+    if (contenders.length === 0) {
+      return {
+        handNumber: state.handNumber,
+        board: [...state.board],
+        winners: [],
+        updatedStacks: players.map((player) => ({
+          seatIndex: player.seatIndex,
+          stack: player.stack,
+          isEliminated: player.stack <= 0,
+        })),
+      };
+    }
 
     const contributionLevels = [...new Set(players.map((player) => player.totalContribution).filter((n) => n > 0))].sort(
       (a, b) => a - b,
@@ -463,6 +497,18 @@ export class HandEngine {
     state.actorPointer = (state.actorPointer + 1) % order.length;
   }
 
+  private runOutBoard(state: RuntimeHandState): void {
+    while (state.board.length < 5) {
+      const card = state.deck.shift();
+      if (!card) {
+        throw new Error("Deck exhausted while running out board.");
+      }
+      state.board.push(card);
+    }
+
+    state.street = "river";
+  }
+
   nextDecision(activeSeats: SeatSnapshot[], handNumber: number): EngineStep {
     const alive = activeSeats.filter((seat) => !seat.isEliminated && seat.stack > 0);
 
@@ -488,6 +534,18 @@ export class HandEngine {
     }
 
     const state = this.handState;
+
+    if (this.getEligiblePlayers(state).length === 0) {
+      this.runOutBoard(state);
+      const resolved = this.settleHand(state);
+      this.handState = null;
+
+      return {
+        type: "hand_complete",
+        hand: resolved,
+      };
+    }
+
     this.normalizeActorPointer(state);
 
     const order = state.orderByStreet[state.street];

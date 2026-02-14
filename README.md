@@ -23,6 +23,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Match analytics APIs/UI are implemented for latency, retries, invalid actions, and token usage.
 - Replay timeline now includes table-state visualization (board, seats/stacks, actor/action, and showdown winners).
 - Hand engine now applies dead-button movement (3+ players), correct heads-up blind/button transitions, and button-order odd-chip distribution.
+- Settlement flow now auto-runs all-in boards to showdown and correctly resolves single-contender (folded-out) pots.
 
 ## Documentation Index
 
@@ -113,7 +114,7 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 
 ## Next Build Steps
 
-1. Close remaining rules-accuracy gaps (deeper side-pot verification and edge-case settlement validation).
+1. Expand integration-style rules verification for side-pot and showdown edge cases.
 2. Expand integration tests for deterministic replay and rules correctness.
 
 The current runtime now includes a first decision-driven loop and strict action schema enforcement. Remaining work focuses on replacing the simplified hand flow with full Texas Hold’em rules accuracy.

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { applyMatchRatings } from "@/lib/rating/elo";
 import { resolveAgentDecision } from "@/lib/runtime/agent-decision";
 import { recordAndPublishMatchEvent } from "@/lib/runtime/event-log";
-import { HandEngine } from "@/lib/runtime/hand-engine";
+import { HandEngine, type ResolvedHand } from "@/lib/runtime/hand-engine";
 import { serializeMatchSummary } from "@/lib/runtime/match-summary";
 
 const activeIntervals = new Map<string, NodeJS.Timeout>();
@@ -171,6 +171,66 @@ async function finalizeMatch(matchId: string) {
   clearRunner(matchId);
 }
 
+async function persistResolvedHand(matchId: string, resolvedHand: ResolvedHand): Promise<void> {
+  await prisma.$transaction(
+    resolvedHand.updatedStacks.map((seat) =>
+      prisma.matchSeat.updateMany({
+        where: { matchId, seatIndex: seat.seatIndex },
+        data: {
+          stack: seat.stack,
+          isEliminated: seat.isEliminated,
+        },
+      }),
+    ),
+  );
+
+  const nextHand = resolvedHand.handNumber + 1;
+  const nextLevelIndex = Math.floor((nextHand - 1) / HANDS_PER_LEVEL);
+
+  await recordAndPublishMatchEvent({
+    type: "match.state",
+    matchId,
+    payload: {
+      handNumber: resolvedHand.handNumber,
+      street: "showdown",
+      board: resolvedHand.board,
+      winners: resolvedHand.winners,
+      tableState: {
+        handNumber: resolvedHand.handNumber,
+        street: "showdown",
+        board: resolvedHand.board,
+        pot: resolvedHand.winners.reduce((sum, winner) => sum + winner.amountWon, 0),
+        winners: resolvedHand.winners,
+      },
+    },
+  });
+
+  if (nextHand > MAX_SIM_HANDS) {
+    await finalizeMatch(matchId);
+    return;
+  }
+
+  const remainingSeats = await prisma.matchSeat.findMany({
+    where: {
+      matchId,
+      isEliminated: false,
+    },
+  });
+
+  if (remainingSeats.length <= 1) {
+    await finalizeMatch(matchId);
+    return;
+  }
+
+  await prisma.match.update({
+    where: { id: matchId },
+    data: {
+      currentHandNumber: nextHand,
+      currentLevelIndex: nextLevelIndex,
+    },
+  });
+}
+
 async function tickMatch(matchId: string): Promise<void> {
   if (inFlightTicks.has(matchId)) {
     return;
@@ -230,19 +290,7 @@ async function tickMatch(matchId: string): Promise<void> {
     const step = engine.nextDecision(activeSeats, handNumber);
 
     if (step.type === "hand_complete") {
-      await prisma.$transaction(
-        step.hand.updatedStacks.map((seat) =>
-          prisma.matchSeat.updateMany({
-            where: { matchId, seatIndex: seat.seatIndex },
-            data: {
-              stack: seat.stack,
-              isEliminated: seat.isEliminated,
-            },
-          }),
-        ),
-      );
-
-      await finalizeMatch(matchId);
+      await persistResolvedHand(matchId, step.hand);
       return;
     }
 
@@ -357,63 +405,7 @@ async function tickMatch(matchId: string): Promise<void> {
 
     if (applyResult.handComplete) {
       const resolvedHand = engine.finalizeCurrentHand();
-
-      await prisma.$transaction(
-        resolvedHand.updatedStacks.map((seat) =>
-          prisma.matchSeat.updateMany({
-            where: { matchId, seatIndex: seat.seatIndex },
-            data: {
-              stack: seat.stack,
-              isEliminated: seat.isEliminated,
-            },
-          }),
-        ),
-      );
-
-      const nextHand = step.hand.handNumber + 1;
-      const nextLevelIndex = Math.floor((nextHand - 1) / HANDS_PER_LEVEL);
-
-      await prisma.match.update({
-        where: { id: match.id },
-        data: {
-          currentHandNumber: nextHand,
-          currentLevelIndex: nextLevelIndex,
-        },
-      });
-
-      await recordAndPublishMatchEvent({
-        type: "match.state",
-        matchId,
-        payload: {
-          handNumber: resolvedHand.handNumber,
-          street: "showdown",
-          board: resolvedHand.board,
-          winners: resolvedHand.winners,
-          tableState: {
-            handNumber: resolvedHand.handNumber,
-            street: "showdown",
-            board: resolvedHand.board,
-            pot: resolvedHand.winners.reduce((sum, winner) => sum + winner.amountWon, 0),
-            winners: resolvedHand.winners,
-          },
-        },
-      });
-
-      if (nextHand > MAX_SIM_HANDS) {
-        await finalizeMatch(matchId);
-        return;
-      }
-
-      const remainingSeats = await prisma.matchSeat.findMany({
-        where: {
-          matchId,
-          isEliminated: false,
-        },
-      });
-
-      if (remainingSeats.length <= 1) {
-        await finalizeMatch(matchId);
-      }
+      await persistResolvedHand(matchId, resolvedHand);
     }
   } finally {
     inFlightTicks.delete(matchId);
