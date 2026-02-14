@@ -1,3 +1,4 @@
+import { AgentManager } from "@/components/agents/agent-manager";
 import { LockButton } from "@/components/bootstrap/lock-button";
 import { SetupForm } from "@/components/bootstrap/setup-form";
 import { UnlockForm } from "@/components/bootstrap/unlock-form";
@@ -75,15 +76,7 @@ export default async function Home() {
           </div>
         </header>
 
-        <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-6">
-          <h2 className="text-lg font-medium">Ready checklist</h2>
-          <ul className="mt-3 space-y-2 text-sm text-zinc-300">
-            <li>• Passphrase setup is complete</li>
-            <li>• Startup unlock gate is active</li>
-            <li>• Unlock state is held in server memory</li>
-            <li>• Bootstrap API endpoints are live</li>
-          </ul>
-        </section>
+        <AgentManager />
       </section>
     </main>
   );

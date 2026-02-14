@@ -13,6 +13,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Custom Node server added with native `ws` endpoint at `/ws`.
 - shadcn/ui initialized for component development.
 - First-run passphrase setup and startup unlock gate are implemented.
+- Agent CRUD with encrypted BYOK storage is implemented.
 
 ## Documentation Index
 
@@ -103,10 +104,10 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 
 ## Next Build Steps
 
-1. Add agent CRUD (provider/model/system prompt + encrypted BYOK).
-2. Implement tournament engine and strict action validation pipeline.
-3. Add websocket-driven live match stream and replay navigation.
-4. Add Elo leaderboard and match analytics views.
+1. Implement tournament engine and strict action validation pipeline.
+2. Add websocket-driven live match stream and replay navigation.
+3. Add Elo leaderboard and match analytics views.
+4. Connect agent runtime to LangChain providers for turn decisions.
 
 ## Bootstrap Security Flow
 
