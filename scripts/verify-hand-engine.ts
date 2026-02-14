@@ -21,6 +21,19 @@ type Decision = {
   amount: number;
 };
 
+type ResolvedLike = {
+  winners: Array<{ seatIndex: number; amountWon: number }>;
+  sidePots: Array<{
+    potIndex: number;
+    amount: number;
+    contributionLevel: number;
+    participantSeats: number[];
+    eligibleSeats: number[];
+    winnerSeats: number[];
+  }>;
+  updatedStacks: Array<{ seatIndex: number; stack: number; isEliminated: boolean }>;
+};
+
 function mulberry32(seed: number) {
   return function random() {
     let t = (seed += 0x6d2b79f5);
@@ -67,6 +80,61 @@ function chooseDecision(legal: Legal, random: () => number): Decision {
   return candidates[Math.floor(random() * candidates.length)];
 }
 
+function assertResolvedHand(
+  resolved: ResolvedLike,
+  expectedTotalStack: number,
+  label: string,
+): void {
+  const sidePotTotal = resolved.sidePots.reduce((sum, sidePot) => sum + sidePot.amount, 0);
+  const winnerTotal = resolved.winners.reduce((sum, winner) => sum + winner.amountWon, 0);
+
+  if (sidePotTotal !== winnerTotal) {
+    throw new Error(
+      `${label}: side-pot total ${sidePotTotal} does not match winner total ${winnerTotal}.`,
+    );
+  }
+
+  const payoutBySeat = new Map<number, number>();
+  for (const sidePot of resolved.sidePots) {
+    if (sidePot.amount < 0) {
+      throw new Error(`${label}: negative side-pot amount at pot ${sidePot.potIndex}.`);
+    }
+
+    if (sidePot.winnerSeats.length > 0) {
+      const base = Math.floor(sidePot.amount / sidePot.winnerSeats.length);
+      let remainder = sidePot.amount % sidePot.winnerSeats.length;
+
+      for (const winnerSeat of sidePot.winnerSeats) {
+        if (!sidePot.eligibleSeats.includes(winnerSeat)) {
+          throw new Error(
+            `${label}: winner seat ${winnerSeat} not eligible in side-pot ${sidePot.potIndex}.`,
+          );
+        }
+
+        const extra = remainder > 0 ? 1 : 0;
+        remainder = Math.max(0, remainder - 1);
+        payoutBySeat.set(winnerSeat, (payoutBySeat.get(winnerSeat) ?? 0) + base + extra);
+      }
+    }
+  }
+
+  for (const winner of resolved.winners) {
+    const fromSidePots = payoutBySeat.get(winner.seatIndex) ?? 0;
+    if (fromSidePots !== winner.amountWon) {
+      throw new Error(
+        `${label}: winner payout mismatch for seat ${winner.seatIndex} (${winner.amountWon} != ${fromSidePots}).`,
+      );
+    }
+  }
+
+  const stackTotal = resolved.updatedStacks.reduce((sum, seat) => sum + seat.stack, 0);
+  if (stackTotal !== expectedTotalStack) {
+    throw new Error(
+      `${label}: stack conservation failed ${stackTotal} != ${expectedTotalStack}.`,
+    );
+  }
+}
+
 function runRandomizedSimulation(seed: number): void {
   const random = mulberry32(seed);
   const engine = new HandEngine({
@@ -96,6 +164,7 @@ function runRandomizedSimulation(seed: number): void {
       const step = engine.nextDecision(seats, handNumber);
 
       if (step.type === "hand_complete") {
+        assertResolvedHand(step.hand, initialTotal, `randomized seed=${seed} hand=${handNumber} complete-step`);
         seats = seats.map((seat) => {
           const updated = step.hand.updatedStacks.find((candidate) => candidate.seatIndex === seat.seatIndex);
           return updated
@@ -110,6 +179,7 @@ function runRandomizedSimulation(seed: number): void {
 
       if (apply.handComplete) {
         const resolved = engine.finalizeCurrentHand();
+        assertResolvedHand(resolved, initialTotal, `randomized seed=${seed} hand=${handNumber} finalize`);
         seats = seats.map((seat) => {
           const updated = resolved.updatedStacks.find((candidate) => candidate.seatIndex === seat.seatIndex);
           return updated
@@ -161,6 +231,7 @@ function runForcedAllInScenario(seed: number): void {
     const step = engine.nextDecision(seats, 1);
 
     if (step.type === "hand_complete") {
+      assertResolvedHand(step.hand, initialTotal, `forced-allin seed=${seed} complete-step`);
       const finalTotal = step.hand.updatedStacks.reduce((sum, seat) => sum + seat.stack, 0);
       if (finalTotal !== initialTotal) {
         throw new Error(
@@ -182,6 +253,7 @@ function runForcedAllInScenario(seed: number): void {
 
     if (apply.handComplete) {
       const resolved = engine.finalizeCurrentHand();
+      assertResolvedHand(resolved, initialTotal, `forced-allin seed=${seed} finalize`);
       const finalTotal = resolved.updatedStacks.reduce((sum, seat) => sum + seat.stack, 0);
       if (finalTotal !== initialTotal) {
         throw new Error(

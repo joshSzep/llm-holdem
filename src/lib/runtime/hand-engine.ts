@@ -80,10 +80,20 @@ export type AppliedDecision = {
   amount: number;
 };
 
+export type SidePotResolution = {
+  potIndex: number;
+  amount: number;
+  contributionLevel: number;
+  participantSeats: number[];
+  eligibleSeats: number[];
+  winnerSeats: number[];
+};
+
 export type ResolvedHand = {
   handNumber: number;
   board: Card[];
   winners: Array<{ seatIndex: number; amountWon: number }>;
+  sidePots: SidePotResolution[];
   updatedStacks: Array<{ seatIndex: number; stack: number; isEliminated: boolean }>;
 };
 
@@ -400,6 +410,22 @@ export class HandEngine {
         handNumber: state.handNumber,
         board: [...state.board],
         winners: [{ seatIndex: winnerSeatIndex, amountWon: totalPot }],
+        sidePots:
+          totalPot > 0
+            ? [
+                {
+                  potIndex: 0,
+                  amount: totalPot,
+                  contributionLevel: Math.max(...players.map((player) => player.totalContribution), 0),
+                  participantSeats: players
+                    .filter((player) => player.totalContribution > 0)
+                    .map((player) => player.seatIndex)
+                    .sort((a, b) => a - b),
+                  eligibleSeats: [winnerSeatIndex],
+                  winnerSeats: [winnerSeatIndex],
+                },
+              ]
+            : [],
         updatedStacks: players.map((player) => {
           const won = player.seatIndex === winnerSeatIndex ? totalPot : 0;
           const finalStack = player.stack + won;
@@ -421,6 +447,7 @@ export class HandEngine {
         handNumber: state.handNumber,
         board: [...state.board],
         winners: [],
+        sidePots: [],
         updatedStacks: players.map((player) => ({
           seatIndex: player.seatIndex,
           stack: player.stack,
@@ -437,6 +464,7 @@ export class HandEngine {
     );
 
     const winnings = new Map<number, number>();
+  const sidePots: SidePotResolution[] = [];
 
     const boardCards = state.board;
 
@@ -468,6 +496,16 @@ export class HandEngine {
         state.buttonSeatIndex,
         winnerSeats,
       );
+
+      sidePots.push({
+        potIndex: sidePots.length,
+        amount: potAmount,
+        contributionLevel: level,
+        participantSeats: participants.map((player) => player.seatIndex).sort((a, b) => a - b),
+        eligibleSeats: eligible.map((player) => player.seatIndex).sort((a, b) => a - b),
+        winnerSeats: orderedWinners,
+      });
+
       for (const seatIndex of orderedWinners) {
         const extra = remainder > 0 ? 1 : 0;
         remainder = Math.max(0, remainder - 1);
@@ -494,6 +532,7 @@ export class HandEngine {
         seatIndex,
         amountWon,
       })),
+      sidePots,
       updatedStacks,
     };
 
@@ -510,6 +549,13 @@ export class HandEngine {
     if (totalAwarded !== totalPot) {
       throw new Error(
         `Settlement invariant failed: awarded ${totalAwarded} but pot is ${totalPot} on hand ${state.handNumber}.`,
+      );
+    }
+
+    const sidePotTotal = resolved.sidePots.reduce((sum, sidePot) => sum + sidePot.amount, 0);
+    if (sidePotTotal !== totalPot) {
+      throw new Error(
+        `Settlement invariant failed: side-pots total ${sidePotTotal} but pot is ${totalPot} on hand ${state.handNumber}.`,
       );
     }
 
@@ -534,6 +580,51 @@ export class HandEngine {
       }
 
       winnerSeatSet.add(winner.seatIndex);
+    }
+
+    const payoutByWinner = new Map<number, number>();
+    for (const sidePot of resolved.sidePots) {
+      if (sidePot.amount < 0) {
+        throw new Error(
+          `Settlement invariant failed: negative side-pot amount ${sidePot.amount} at index ${sidePot.potIndex}.`,
+        );
+      }
+
+      if (sidePot.winnerSeats.length === 0 && sidePot.amount > 0) {
+        throw new Error(
+          `Settlement invariant failed: side-pot ${sidePot.potIndex} has amount with no winners.`,
+        );
+      }
+
+      for (const winnerSeat of sidePot.winnerSeats) {
+        if (!sidePot.eligibleSeats.includes(winnerSeat)) {
+          throw new Error(
+            `Settlement invariant failed: side-pot ${sidePot.potIndex} winner seat ${winnerSeat} not in eligible set.`,
+          );
+        }
+      }
+
+      if (sidePot.winnerSeats.length === 0) {
+        continue;
+      }
+
+      const base = Math.floor(sidePot.amount / sidePot.winnerSeats.length);
+      let remainder = sidePot.amount % sidePot.winnerSeats.length;
+
+      for (const seatIndex of sidePot.winnerSeats) {
+        const extra = remainder > 0 ? 1 : 0;
+        remainder = Math.max(0, remainder - 1);
+        payoutByWinner.set(seatIndex, (payoutByWinner.get(seatIndex) ?? 0) + base + extra);
+      }
+    }
+
+    for (const winner of resolved.winners) {
+      const sidePotAward = payoutByWinner.get(winner.seatIndex) ?? 0;
+      if (sidePotAward !== winner.amountWon) {
+        throw new Error(
+          `Settlement invariant failed: payout mismatch for seat ${winner.seatIndex} (${winner.amountWon} != ${sidePotAward}).`,
+        );
+      }
     }
 
     const stackBySeat = new Map<number, number>();
@@ -587,6 +678,7 @@ export class HandEngine {
           handNumber,
           board: [],
           winners: winner ? [{ seatIndex: winner.seatIndex, amountWon: 0 }] : [],
+          sidePots: [],
           updatedStacks: activeSeats.map((seat) => ({
             seatIndex: seat.seatIndex,
             stack: seat.stack,

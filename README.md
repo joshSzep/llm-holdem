@@ -24,6 +24,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Replay timeline now includes table-state visualization (board, seats/stacks, actor/action, and showdown winners).
 - Hand engine now applies dead-button movement (3+ players), correct heads-up blind/button transitions, and button-order odd-chip distribution.
 - Settlement flow now auto-runs all-in boards to showdown and correctly resolves single-contender (folded-out) pots.
+- Showdown events now include explicit side-pot tier composition (participants, eligible seats, winners) for replay auditing.
 
 ## Documentation Index
 
@@ -93,7 +94,7 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 	pnpm verify:engine
 	```
 
-	This stress-checks side-pot/showdown invariants and chip conservation across randomized and forced all-in scenarios.
+	This stress-checks side-pot/showdown invariants, tier payout consistency, and chip conservation across randomized and forced all-in scenarios.
 
 ## Using `just`
 
@@ -122,8 +123,7 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 
 ## Next Build Steps
 
-1. Expand integration-style rules verification for side-pot and showdown edge cases.
-2. Expand integration tests for deterministic replay and rules correctness.
+1. Expand integration tests for deterministic replay and rules correctness.
 
 The current runtime now includes a first decision-driven loop and strict action schema enforcement. Remaining work focuses on replacing the simplified hand flow with full Texas Hold’em rules accuracy.
 

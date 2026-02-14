@@ -195,12 +195,14 @@ async function persistResolvedHand(matchId: string, resolvedHand: ResolvedHand):
       street: "showdown",
       board: resolvedHand.board,
       winners: resolvedHand.winners,
+      sidePots: resolvedHand.sidePots,
       tableState: {
         handNumber: resolvedHand.handNumber,
         street: "showdown",
         board: resolvedHand.board,
         pot: resolvedHand.winners.reduce((sum, winner) => sum + winner.amountWon, 0),
         winners: resolvedHand.winners,
+        sidePots: resolvedHand.sidePots,
       },
     },
   });

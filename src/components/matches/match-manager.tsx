@@ -53,6 +53,15 @@ type ReplayWinnerView = {
   amountWon: number;
 };
 
+type ReplaySidePotView = {
+  potIndex: number;
+  amount: number;
+  contributionLevel: number;
+  participantSeats: number[];
+  eligibleSeats: number[];
+  winnerSeats: number[];
+};
+
 type ReplayStateView = {
   handNumber: number | null;
   street: string | null;
@@ -62,6 +71,7 @@ type ReplayStateView = {
   board: string[];
   seats: ReplaySeatView[];
   winners: ReplayWinnerView[];
+  sidePots: ReplaySidePotView[];
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -111,6 +121,11 @@ function buildReplayState(event: TimelineEvent): ReplayStateView {
     ? tableState.winners
     : Array.isArray(payload.winners)
       ? payload.winners
+      : [];
+  const sidePotsRaw = Array.isArray(tableState?.sidePots)
+    ? tableState.sidePots
+    : Array.isArray(payload.sidePots)
+      ? payload.sidePots
       : [];
 
   let seats: ReplaySeatView[] = [];
@@ -173,6 +188,38 @@ function buildReplayState(event: TimelineEvent): ReplayStateView {
     })
     .filter((winner): winner is ReplayWinnerView => Boolean(winner));
 
+  const sidePots = sidePotsRaw
+    .map((sidePotValue) => {
+      const sidePot = asRecord(sidePotValue);
+      const potIndex = asNumber(sidePot?.potIndex);
+      const amount = asNumber(sidePot?.amount);
+      const contributionLevel = asNumber(sidePot?.contributionLevel);
+      const participantSeats = Array.isArray(sidePot?.participantSeats)
+        ? sidePot.participantSeats.filter((value): value is number => typeof value === "number")
+        : [];
+      const eligibleSeats = Array.isArray(sidePot?.eligibleSeats)
+        ? sidePot.eligibleSeats.filter((value): value is number => typeof value === "number")
+        : [];
+      const winnerSeats = Array.isArray(sidePot?.winnerSeats)
+        ? sidePot.winnerSeats.filter((value): value is number => typeof value === "number")
+        : [];
+
+      if (potIndex === null || amount === null || contributionLevel === null) {
+        return null;
+      }
+
+      return {
+        potIndex,
+        amount,
+        contributionLevel,
+        participantSeats,
+        eligibleSeats,
+        winnerSeats,
+      } satisfies ReplaySidePotView;
+    })
+    .filter((sidePot): sidePot is ReplaySidePotView => Boolean(sidePot))
+    .sort((a, b) => a.potIndex - b.potIndex);
+
   const action = asRecord(payload.action);
   const actionName = asString(action?.action);
   const actionAmount = asNumber(action?.amount);
@@ -186,6 +233,7 @@ function buildReplayState(event: TimelineEvent): ReplayStateView {
     board: asStringArray(tableState?.board ?? payload.board),
     seats,
     winners,
+    sidePots,
   };
 }
 
@@ -807,6 +855,28 @@ export function MatchManager() {
                   {replayState.winners.map((winner) => (
                     <li key={`${winner.seatIndex}-${winner.amountWon}`}>
                       Seat {winner.seatIndex + 1}: +{winner.amountWon}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {replayState?.sidePots.length ? (
+              <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-300">
+                <p className="uppercase tracking-wide text-zinc-500">Side Pots</p>
+                <ul className="mt-2 space-y-2">
+                  {replayState.sidePots.map((sidePot) => (
+                    <li key={`${sidePot.potIndex}-${sidePot.amount}`} className="rounded border border-zinc-800 bg-zinc-900/50 p-2">
+                      <p>
+                        pot #{sidePot.potIndex + 1} · amount {sidePot.amount} · level {sidePot.contributionLevel}
+                      </p>
+                      <p className="text-zinc-500">
+                        participants {sidePot.participantSeats.map((seat) => seat + 1).join(", ") || "—"} · eligible {sidePot.eligibleSeats
+                          .map((seat) => seat + 1)
+                          .join(", ") || "—"} · winners {sidePot.winnerSeats
+                          .map((seat) => seat + 1)
+                          .join(", ") || "—"}
+                      </p>
                     </li>
                   ))}
                 </ul>
