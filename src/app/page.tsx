@@ -4,6 +4,7 @@ import { SetupForm } from "@/components/bootstrap/setup-form";
 import { UnlockForm } from "@/components/bootstrap/unlock-form";
 import { MatchManager } from "@/components/matches/match-manager";
 import { LeaderboardPanel } from "@/components/leaderboard/leaderboard-panel";
+import { AnalyticsPanel } from "@/components/analytics/analytics-panel";
 import { prisma } from "@/lib/prisma";
 import { isUnlocked } from "@/lib/security/unlock-session";
 
@@ -81,6 +82,7 @@ export default async function Home() {
         <AgentManager />
         <MatchManager />
         <LeaderboardPanel />
+        <AnalyticsPanel />
       </section>
     </main>
   );
