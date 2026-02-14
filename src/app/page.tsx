@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { AgentManager } from "@/components/agents/agent-manager";
 import { LockButton } from "@/components/bootstrap/lock-button";
@@ -37,49 +37,31 @@ export default function Home() {
   const [status, setStatus] = useState<BootstrapStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const refreshStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/bootstrap/status", {
+        cache: "no-store",
+      });
 
-    async function loadStatus() {
-      try {
-        const response = await fetch("/api/bootstrap/status", {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to load bootstrap status.");
-        }
-
-        const body = (await response.json()) as BootstrapStatus;
-
-        if (cancelled) {
-          return;
-        }
-
-        setStatus({
-          initialized: Boolean(body.initialized),
-          unlocked: Boolean(body.unlocked),
-        });
-        setStatusError(null);
-      } catch {
-        if (cancelled) {
-          return;
-        }
-
-        setStatusError("Unable to load app status.");
+      if (!response.ok) {
+        throw new Error("Failed to load bootstrap status.");
       }
+
+      const body = (await response.json()) as BootstrapStatus;
+
+      setStatus({
+        initialized: Boolean(body.initialized),
+        unlocked: Boolean(body.unlocked),
+      });
+      setStatusError(null);
+    } catch {
+      setStatusError("Unable to load app status.");
     }
-
-    void loadStatus();
-    const intervalId = window.setInterval(() => {
-      void loadStatus();
-    }, 1500);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
   }, []);
+
+  useEffect(() => {
+    void refreshStatus();
+  }, [refreshStatus]);
 
   if (statusError) {
     return (
@@ -90,7 +72,7 @@ export default function Home() {
         >
           <button
             className="inline-flex w-full items-center justify-center rounded-md bg-zinc-100 px-3 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200"
-            onClick={() => window.location.reload()}
+            onClick={() => void refreshStatus()}
             type="button"
           >
             Retry
@@ -120,7 +102,7 @@ export default function Home() {
           title="Set up LLM Hold&apos;em"
           description="Create a master passphrase to encrypt provider API keys at rest."
         >
-          <SetupForm />
+          <SetupForm onSuccess={refreshStatus} />
         </Card>
       </main>
     );
@@ -133,7 +115,7 @@ export default function Home() {
           title="Unlock LLM Hold’em"
           description="Enter your master passphrase to unlock encrypted agent credentials for this server session."
         >
-          <UnlockForm />
+          <UnlockForm onSuccess={refreshStatus} />
         </Card>
       </main>
     );
@@ -155,7 +137,7 @@ export default function Home() {
                 Startup passphrase flow is active. Next up: agent creator, encrypted key CRUD, and match runtime.
               </p>
             </div>
-            <LockButton />
+            <LockButton onLocked={refreshStatus} />
           </div>
         </header>
 

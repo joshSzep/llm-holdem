@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
-export function LockButton() {
-  const router = useRouter();
+export function LockButton({ onLocked }: { onLocked?: () => void | Promise<void> }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function onLock() {
@@ -12,7 +10,7 @@ export function LockButton() {
 
     try {
       await fetch("/api/bootstrap/lock", { method: "POST" });
-      router.refresh();
+      await onLocked?.();
     } finally {
       setIsSubmitting(false);
     }

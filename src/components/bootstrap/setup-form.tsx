@@ -1,10 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 
-export function SetupForm() {
-  const router = useRouter();
+export function SetupForm({ onSuccess }: { onSuccess?: () => void | Promise<void> }) {
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +29,7 @@ export function SetupForm() {
 
       setPassphrase("");
       setConfirmPassphrase("");
-      router.refresh();
+      await onSuccess?.();
     } catch (submitError) {
       setError(
         submitError instanceof Error
