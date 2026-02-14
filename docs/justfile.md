@@ -32,6 +32,12 @@ just
 - `just env`  
   Creates `.env` from `.env.example` if it does not exist.
 
+- `just all`  
+  End-to-end one-command flow:
+  1. run setup,
+  2. run full verification (`pnpm verify:all`),
+  3. start dev server.
+
 - `just setup`  
   First-run bootstrap sequence:
   1. install dependencies,

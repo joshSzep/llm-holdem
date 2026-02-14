@@ -40,6 +40,12 @@ setup:
   just env
   just db-migrate init
 
+# One-command flow: bootstrap, verify, then launch dev server
+all:
+  just setup
+  just verify
+  just dev
+
 # Start local dev server (custom Node + Next + ws)
 dev:
   pnpm dev

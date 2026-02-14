@@ -140,8 +140,7 @@ This repository includes a root `justfile` for common workflows.
 3. Typical workflow:
 
 	```bash
-	just setup
-	just dev
+	just all
 	```
 
 See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
