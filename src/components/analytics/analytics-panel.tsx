@@ -289,6 +289,7 @@ export function AnalyticsPanel() {
                       <th className="px-3 py-2">Hand</th>
                       <th className="px-3 py-2">Category</th>
                       <th className="px-3 py-2">Message</th>
+                      <th className="px-3 py-2">Raw</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -306,6 +307,20 @@ export function AnalyticsPanel() {
                         </td>
                         <td className="px-3 py-2">{row.category}</td>
                         <td className="px-3 py-2">{row.message ?? row.validationError ?? "—"}</td>
+                        <td className="px-3 py-2 align-top">
+                          {row.rawResponse ? (
+                            <details>
+                              <summary className="cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                view
+                              </summary>
+                              <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950 p-2 text-[11px] text-zinc-400">
+                                {row.rawResponse}
+                              </pre>
+                            </details>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
