@@ -30,6 +30,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Invalid decision analytics now provides expandable raw model response inspection per event.
 - Invalid decision raw responses now support one-click copy-to-clipboard.
 - Invalid decision drilldown now supports copying all currently visible raw responses.
+- Invalid decision drilldown now supports exporting visible rows as JSON.
 
 ## Documentation Index
 

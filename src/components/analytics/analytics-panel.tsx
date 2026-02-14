@@ -97,6 +97,7 @@ export function AnalyticsPanel() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
+  const [exportedJson, setExportedJson] = useState(false);
 
   const refreshAnalytics = useCallback(async () => {
     setLoading(true);
@@ -186,6 +187,43 @@ export function AnalyticsPanel() {
     } catch {
       setError("Failed to copy raw responses.");
     }
+  }
+
+  function exportVisibleInvalidAsJson() {
+    if (!analytics) {
+      return;
+    }
+
+    const visible = analytics.recentInvalidDecisions;
+    if (visible.length === 0) {
+      setError("No visible invalid decisions to export.");
+      return;
+    }
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      categoryFilter,
+      count: visible.length,
+      rows: visible,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `invalid-decisions-${categoryFilter}-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+
+    setExportedJson(true);
+    setTimeout(() => {
+      setExportedJson(false);
+    }, 1500);
   }
 
   return (
@@ -322,6 +360,13 @@ export function AnalyticsPanel() {
                   className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 transition hover:bg-zinc-800"
                 >
                   {copiedAll ? "copied all" : "copy visible"}
+                </button>
+                <button
+                  type="button"
+                  onClick={exportVisibleInvalidAsJson}
+                  className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  {exportedJson ? "exported" : "export json"}
                 </button>
               </div>
             </div>
