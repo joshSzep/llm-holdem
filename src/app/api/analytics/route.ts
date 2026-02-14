@@ -9,6 +9,19 @@ type TokenUsageTotals = {
   total: number;
 };
 
+function parseValidationErrorCategory(validationError: string | null): string {
+  if (!validationError) {
+    return "none";
+  }
+
+  const match = validationError.match(/^\[([a-z_]+)\]/i);
+  if (match?.[1]) {
+    return match[1].toLowerCase();
+  }
+
+  return "legacy_unclassified";
+}
+
 function asNumber(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return null;
@@ -133,6 +146,7 @@ export async function GET() {
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let totalTokens = 0;
+  const invalidByCategory: Record<string, number> = {};
   const latencyValues: number[] = [];
 
   for (const action of allActions) {
@@ -142,6 +156,8 @@ export async function GET() {
 
     if (action.validationError) {
       invalidActions += 1;
+      const category = parseValidationErrorCategory(action.validationError);
+      invalidByCategory[category] = (invalidByCategory[category] ?? 0) + 1;
     }
 
     if (typeof action.latencyMs === "number") {
@@ -162,6 +178,7 @@ export async function GET() {
     let matchInputTokens = 0;
     let matchOutputTokens = 0;
     let matchTotalTokens = 0;
+    const matchInvalidByCategory: Record<string, number> = {};
     const matchLatencies: number[] = [];
 
     for (const action of match.actions) {
@@ -171,6 +188,8 @@ export async function GET() {
 
       if (action.validationError) {
         matchInvalid += 1;
+        const category = parseValidationErrorCategory(action.validationError);
+        matchInvalidByCategory[category] = (matchInvalidByCategory[category] ?? 0) + 1;
       }
 
       if (typeof action.latencyMs === "number") {
@@ -198,6 +217,7 @@ export async function GET() {
       p95LatencyMs: percentile(matchLatencies, 95),
       retries: matchRetries,
       invalidActions: matchInvalid,
+      invalidByCategory: matchInvalidByCategory,
       retryRate: actionCount > 0 ? matchRetries / actionCount : 0,
       invalidRate: actionCount > 0 ? matchInvalid / actionCount : 0,
       tokenUsage: {
@@ -217,6 +237,7 @@ export async function GET() {
       p95LatencyMs: percentile(latencyValues, 95),
       retriedActions,
       invalidActions,
+      invalidByCategory,
       retryRate: totalActions > 0 ? retriedActions / totalActions : 0,
       invalidRate: totalActions > 0 ? invalidActions / totalActions : 0,
       tokenUsage: {

@@ -10,6 +10,7 @@ type AnalyticsOverview = {
   p95LatencyMs: number | null;
   retriedActions: number;
   invalidActions: number;
+  invalidByCategory: Record<string, number>;
   retryRate: number;
   invalidRate: number;
   tokenUsage: {
@@ -30,6 +31,7 @@ type MatchAnalyticsRow = {
   p95LatencyMs: number | null;
   retries: number;
   invalidActions: number;
+  invalidByCategory: Record<string, number>;
   retryRate: number;
   invalidRate: number;
   tokenUsage: {
@@ -54,6 +56,18 @@ function formatMs(value: number | null): string {
   }
 
   return `${value.toFixed(1)} ms`;
+}
+
+function formatCategorySummary(input: Record<string, number>): string {
+  const entries = Object.entries(input)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+
+  if (entries.length === 0) {
+    return "none";
+  }
+
+  return entries.map(([category, count]) => `${category}:${count}`).join(" · ");
 }
 
 export function AnalyticsPanel() {
@@ -133,6 +147,9 @@ export function AnalyticsPanel() {
               <p className="text-xs text-zinc-500">
                 {formatRate(analytics.overview.retryRate)} · {formatRate(analytics.overview.invalidRate)}
               </p>
+              <p className="text-xs text-zinc-500">
+                {formatCategorySummary(analytics.overview.invalidByCategory)}
+              </p>
             </div>
             <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-3 text-sm">
               <p className="text-zinc-400">Tokens</p>
@@ -153,6 +170,7 @@ export function AnalyticsPanel() {
                   <th className="px-3 py-2">Latency (avg/p95)</th>
                   <th className="px-3 py-2">Retries</th>
                   <th className="px-3 py-2">Invalid</th>
+                  <th className="px-3 py-2">Error Mix</th>
                   <th className="px-3 py-2">Tokens</th>
                 </tr>
               </thead>
@@ -171,6 +189,7 @@ export function AnalyticsPanel() {
                     <td className="px-3 py-2">
                       {match.invalidActions} ({formatRate(match.invalidRate)})
                     </td>
+                    <td className="px-3 py-2">{formatCategorySummary(match.invalidByCategory)}</td>
                     <td className="px-3 py-2">{match.tokenUsage.total}</td>
                   </tr>
                 ))}

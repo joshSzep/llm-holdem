@@ -56,6 +56,14 @@ type InvocationResult = {
   tokenUsage: unknown;
 };
 
+type DecisionErrorCategory =
+  | "invalid_json"
+  | "invalid_schema"
+  | "illegal_action"
+  | "provider_transport"
+  | "provider_config"
+  | "unknown";
+
 const RESPONSE_CONTRACT = `Return exactly one JSON object with this shape:\n{\n  "action": "fold | check | call | bet | raise | all_in",\n  "amount": 0,\n  "tableTalk": "optional short string"\n}\nNo markdown. No surrounding text.`;
 
 const ACTIONS = new Set(["fold", "check", "call", "bet", "raise", "all_in"]);
@@ -297,6 +305,62 @@ function fallbackDecision(legal: LegalActionSet): ValidatedDecision {
   return { action: "all_in", amount: legal.maxRaiseTo };
 }
 
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message.trim();
+  }
+
+  return "Unknown decision error.";
+}
+
+function classifyDecisionError(message: string): DecisionErrorCategory {
+  const lower = message.toLowerCase();
+
+  if (
+    lower.includes("response was not valid json") ||
+    lower.includes("unexpected token") ||
+    lower.includes("json")
+  ) {
+    return "invalid_json";
+  }
+
+  if (lower.includes("action must be") || lower.includes("decision must be a json object")) {
+    return "invalid_schema";
+  }
+
+  if (
+    lower.includes("illegal") ||
+    lower.includes("must be between") ||
+    lower.includes("no amount to call") ||
+    lower.includes("unsupported action")
+  ) {
+    return "illegal_action";
+  }
+
+  if (lower.includes("unsupported provider") || lower.includes("api key")) {
+    return "provider_config";
+  }
+
+  if (
+    lower.includes("timeout") ||
+    lower.includes("429") ||
+    lower.includes("rate limit") ||
+    lower.includes("network") ||
+    lower.includes("fetch") ||
+    lower.includes("connection") ||
+    lower.includes("service unavailable")
+  ) {
+    return "provider_transport";
+  }
+
+  return "unknown";
+}
+
+function formatValidationError(message: string): string {
+  const category = classifyDecisionError(message);
+  return `[${category}] ${message}`;
+}
+
 export async function resolveAgentDecision({
   agent,
   seat,
@@ -330,16 +394,29 @@ export async function resolveAgentDecision({
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const retryError = attempt === 1 ? attempts[0]?.validationError ?? undefined : undefined;
 
+    const { systemPrompt, userPrompt } = buildPrompts(agent, context, retryError);
+
+    let invocation: InvocationResult;
+
     try {
-      const { systemPrompt, userPrompt } = buildPrompts(agent, context, retryError);
-      const invocation = await invokeViaProvider({
+      invocation = await invokeViaProvider({
         provider: agent.provider,
         modelId: agent.modelId,
         apiKey,
         systemPrompt,
         userPrompt,
       });
+    } catch (error) {
+      const message = normalizeErrorMessage(error);
+      attempts.push({
+        rawText: message,
+        validationError: formatValidationError(message),
+        tokenUsage: null,
+      });
+      continue;
+    }
 
+    try {
       const jsonText = extractJsonObject(invocation.rawText);
       const parsed = JSON.parse(jsonText) as unknown;
       const decision = validateDecisionPayload(parsed, context.legal, seat.stack);
@@ -366,8 +443,12 @@ export async function resolveAgentDecision({
         ),
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown decision error.";
-      attempts.push({ rawText: message, validationError: message, tokenUsage: null });
+      const message = normalizeErrorMessage(error);
+      attempts.push({
+        rawText: invocation.rawText,
+        validationError: formatValidationError(message),
+        tokenUsage: invocation.tokenUsage,
+      });
     }
   }
 
@@ -378,7 +459,8 @@ export async function resolveAgentDecision({
     requestedActionJson: JSON.stringify({ action: "forced_fallback" }),
     resolvedActionJson: JSON.stringify(fallback),
     rawResponse: attempts.map((entry, index) => `attempt_${index + 1}:\n${entry.rawText}`).join("\n\n"),
-    validationError: attempts[attempts.length - 1]?.validationError ?? "Invalid action output.",
+    validationError:
+      attempts[attempts.length - 1]?.validationError ?? formatValidationError("Invalid action output."),
     retried: true,
     latencyMs: Date.now() - start,
     tokenUsageJson: JSON.stringify(
