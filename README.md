@@ -15,6 +15,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - First-run passphrase setup and startup unlock gate are implemented.
 - Agent CRUD with encrypted BYOK storage is implemented.
 - Match create/list foundation is implemented with deterministic seed support and 6-seat agent selection.
+- Initial match runtime loop and websocket event broadcasting are implemented.
 
 ## Documentation Index
 
@@ -106,8 +107,8 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 ## Next Build Steps
 
 1. Implement tournament engine and strict action validation pipeline.
-2. Add websocket-driven live match stream and replay navigation.
-3. Connect agent runtime to LangChain providers for turn decisions.
+2. Connect agent runtime to LangChain providers for turn decisions.
+3. Upgrade runtime events to full hand/action timeline and replay controls.
 4. Add Elo leaderboard and match analytics views.
 
 ## Bootstrap Security Flow

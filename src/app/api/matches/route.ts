@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { publishMatchEvent } from "@/lib/runtime/match-events";
+import { serializeMatchSummary } from "@/lib/runtime/match-summary";
 import { requireUnlockedResponse } from "@/lib/security/require-unlock";
 
 const createMatchSchema = z.object({
@@ -52,27 +54,7 @@ export async function GET() {
   });
 
   return NextResponse.json({
-    matches: matches.map((match) => ({
-      id: match.id,
-      status: match.status,
-      mode: match.mode,
-      seed: match.seed,
-      maxSeats: match.maxSeats,
-      startingStack: match.startingStack,
-      currentHandNumber: match.currentHandNumber,
-      currentLevelIndex: match.currentLevelIndex,
-      playbackSpeedMs: match.playbackSpeedMs,
-      createdAt: match.createdAt,
-      startedAt: match.startedAt,
-      completedAt: match.completedAt,
-      seats: match.seats.map((seat) => ({
-        seatIndex: seat.seatIndex,
-        stack: seat.stack,
-        isEliminated: seat.isEliminated,
-        finishPlace: seat.finishPlace,
-        agent: seat.agent,
-      })),
-    })),
+    matches: matches.map((match) => serializeMatchSummary(match)),
   });
 }
 
@@ -147,29 +129,19 @@ export async function POST(request: Request) {
     },
   });
 
+  const summary = serializeMatchSummary(match);
+
+  publishMatchEvent({
+    type: "match.created",
+    matchId: match.id,
+    payload: {
+      summary,
+    },
+  });
+
   return NextResponse.json(
     {
-      match: {
-        id: match.id,
-        status: match.status,
-        mode: match.mode,
-        seed: match.seed,
-        maxSeats: match.maxSeats,
-        startingStack: match.startingStack,
-        currentHandNumber: match.currentHandNumber,
-        currentLevelIndex: match.currentLevelIndex,
-        playbackSpeedMs: match.playbackSpeedMs,
-        createdAt: match.createdAt,
-        startedAt: match.startedAt,
-        completedAt: match.completedAt,
-        seats: match.seats.map((seat) => ({
-          seatIndex: seat.seatIndex,
-          stack: seat.stack,
-          isEliminated: seat.isEliminated,
-          finishPlace: seat.finishPlace,
-          agent: seat.agent,
-        })),
-      },
+      match: summary,
     },
     { status: 201 },
   );

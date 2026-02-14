@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import type { SupportedProvider } from "@/lib/llm/curated-models";
+import { MatchEventsFeed } from "@/components/matches/match-events-feed";
 
 type AgentSummary = {
   id: string;
@@ -39,7 +40,11 @@ export function MatchManager() {
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [startingMatchId, setStartingMatchId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [eventMatchFilter, setEventMatchFilter] = useState<string | undefined>(
+    undefined,
+  );
 
   const selectedCount = selectedAgentIds.length;
   const canSubmit = selectedCount === 6 && !submitting;
@@ -148,6 +153,31 @@ export function MatchManager() {
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function onStartMatch(matchId: string) {
+    setError(null);
+    setStartingMatchId(matchId);
+
+    try {
+      const response = await fetch(`/api/matches/${matchId}/start`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        throw new Error(body.error ?? "Failed to start match.");
+      }
+
+      setEventMatchFilter(matchId);
+      await refreshData();
+    } catch (startError) {
+      setError(
+        startError instanceof Error ? startError.message : "Failed to start match.",
+      );
+    } finally {
+      setStartingMatchId(null);
     }
   }
 
@@ -309,9 +339,32 @@ export function MatchManager() {
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">seed: {match.seed}</p>
                 </div>
-                <p className="text-xs text-zinc-500">
-                  {new Date(match.createdAt).toLocaleString()}
-                </p>
+                <div className="flex flex-col items-end gap-2">
+                  <p className="text-xs text-zinc-500">
+                    {new Date(match.createdAt).toLocaleString()}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEventMatchFilter(match.id)}
+                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-200 transition hover:bg-zinc-800"
+                    >
+                      Watch events
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onStartMatch(match.id)}
+                      disabled={
+                        startingMatchId === match.id ||
+                        match.status === "running" ||
+                        match.status === "completed"
+                      }
+                      className="rounded-md border border-emerald-900 px-2.5 py-1 text-xs text-emerald-300 transition hover:bg-emerald-950/50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {startingMatchId === match.id ? "Starting..." : "Start"}
+                    </button>
+                  </div>
+                </div>
               </div>
               <ul className="mt-3 grid gap-1 text-xs text-zinc-300 md:grid-cols-2">
                 {match.seats.map((seat) => (
@@ -323,6 +376,10 @@ export function MatchManager() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="mt-8">
+        <MatchEventsFeed selectedMatchId={eventMatchFilter} />
       </div>
     </section>
   );
