@@ -29,6 +29,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Analytics now includes a filterable recent-invalid-decisions drilldown by error category.
 - Invalid decision analytics now provides expandable raw model response inspection per event.
 - Invalid decision raw responses now support one-click copy-to-clipboard.
+- Invalid decision drilldown now supports copying all currently visible raw responses.
 
 ## Documentation Index
 

@@ -96,6 +96,7 @@ export function AnalyticsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   const refreshAnalytics = useCallback(async () => {
     setLoading(true);
@@ -155,6 +156,35 @@ export function AnalyticsPanel() {
       }, 1500);
     } catch {
       setError("Failed to copy raw response.");
+    }
+  }
+
+  async function copyAllVisibleRawResponses() {
+    if (!analytics) {
+      return;
+    }
+
+    const visible = analytics.recentInvalidDecisions.filter((row) => row.rawResponse.trim().length > 0);
+    if (visible.length === 0) {
+      setError("No raw responses available to copy.");
+      return;
+    }
+
+    const payload = visible
+      .map((row) => {
+        const header = `${row.createdAt} | ${row.matchId} | hand ${row.handNumber} ${row.street} seat ${row.actorSeatIndex + 1} | ${row.category}`;
+        return `${header}\n${row.rawResponse}`;
+      })
+      .join("\n\n-----\n\n");
+
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopiedAll(true);
+      setTimeout(() => {
+        setCopiedAll(false);
+      }, 1500);
+    } catch {
+      setError("Failed to copy raw responses.");
     }
   }
 
@@ -286,6 +316,13 @@ export function AnalyticsPanel() {
                       </option>
                     ))}
                 </select>
+                <button
+                  type="button"
+                  onClick={() => void copyAllVisibleRawResponses()}
+                  className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  {copiedAll ? "copied all" : "copy visible"}
+                </button>
               </div>
             </div>
 
