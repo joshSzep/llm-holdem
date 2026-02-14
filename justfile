@@ -56,10 +56,13 @@ start:
 lint:
   pnpm lint
 
+# Run runtime verification scripts + lint + build
+verify:
+  pnpm verify:all
+
 # Run quality checks
 check:
-  just lint
-  just build
+  just verify
 
 # Remove local build artifacts
 clean:

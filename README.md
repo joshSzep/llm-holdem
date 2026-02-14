@@ -104,6 +104,14 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 
 	This runs fixed-seed simulations twice and fails if timeline fingerprints drift between runs.
 
+8. Run full local CI-style verification:
+
+	```bash
+	pnpm verify:all
+	```
+
+	This runs engine verification, deterministic replay regression, lint, and build in one command.
+
 ## Using `just`
 
 This repository includes a root `justfile` for common workflows.

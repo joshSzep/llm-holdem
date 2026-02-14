@@ -9,6 +9,7 @@
     "lint": "eslint",
     "verify:engine": "tsx scripts/verify-hand-engine.ts",
     "verify:determinism": "tsx scripts/verify-determinism.ts",
+    "verify:all": "pnpm verify:engine && pnpm verify:determinism && pnpm lint && pnpm build",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

@@ -52,8 +52,11 @@ just
 - `just lint`  
   Runs ESLint.
 
+- `just verify`  
+  Runs engine verification, deterministic replay regression verification, lint, and build.
+
 - `just check`  
-  Runs `lint` then `build` as a baseline CI-style local check.
+  Alias for `verify` (full local CI-style validation).
 
 ### Database (Prisma)
 
