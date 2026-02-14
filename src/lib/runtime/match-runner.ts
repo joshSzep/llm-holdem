@@ -1,6 +1,7 @@
 import { MatchMode, MatchStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { applyMatchRatings } from "@/lib/rating/elo";
 import { resolveAgentDecision } from "@/lib/runtime/agent-decision";
 import { recordAndPublishMatchEvent } from "@/lib/runtime/event-log";
 import { HandEngine } from "@/lib/runtime/hand-engine";
@@ -112,6 +113,8 @@ async function finalizeMatch(matchId: string) {
       },
     }),
   ]);
+
+  await applyMatchRatings(matchId);
 
   const completed = await prisma.match.findUnique({
     where: { id: matchId },

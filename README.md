@@ -19,6 +19,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Strict JSON action decision contract with retry-once validation and action telemetry persistence is implemented.
 - Runtime now uses a deterministic hand/street engine with dealing, blinds, multi-street action flow, and showdown settlement.
 - Replay controls are implemented with pause/resume/step actions and persisted timeline navigation.
+- Elo rating updates and leaderboard APIs/UI are implemented.
 
 ## Documentation Index
 
@@ -111,7 +112,7 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 
 1. Close remaining rules-accuracy gaps (dead-button behavior, heads-up blind transition edge cases, and deeper side-pot verification).
 2. Expand replay UI from raw timeline payloads into richer table-state visualization per event.
-3. Add Elo leaderboard and match analytics views.
+3. Add richer match analytics views (latency, retries, invalid actions, token usage).
 4. Expand integration tests for deterministic replay and rules correctness.
 
 The current runtime now includes a first decision-driven loop and strict action schema enforcement. Remaining work focuses on replacing the simplified hand flow with full Texas Hold’em rules accuracy.
