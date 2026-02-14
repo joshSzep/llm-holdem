@@ -87,6 +87,14 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 - App: `http://localhost:3000`
 - WebSocket: `ws://localhost:3000/ws`
 
+6. Run hand-engine settlement verification:
+
+	```bash
+	pnpm verify:engine
+	```
+
+	This stress-checks side-pot/showdown invariants and chip conservation across randomized and forced all-in scenarios.
+
 ## Using `just`
 
 This repository includes a root `justfile` for common workflows.

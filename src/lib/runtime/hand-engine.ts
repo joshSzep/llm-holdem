@@ -396,7 +396,7 @@ export class HandEngine {
     if (contenders.length === 1) {
       const winnerSeatIndex = contenders[0].seatIndex;
 
-      return {
+      const resolved = {
         handNumber: state.handNumber,
         board: [...state.board],
         winners: [{ seatIndex: winnerSeatIndex, amountWon: totalPot }],
@@ -411,10 +411,13 @@ export class HandEngine {
           };
         }),
       };
+
+      this.assertSettlementInvariants(state, resolved);
+      return resolved;
     }
 
     if (contenders.length === 0) {
-      return {
+      const resolved = {
         handNumber: state.handNumber,
         board: [...state.board],
         winners: [],
@@ -424,6 +427,9 @@ export class HandEngine {
           isEliminated: player.stack <= 0,
         })),
       };
+
+      this.assertSettlementInvariants(state, resolved);
+      return resolved;
     }
 
     const contributionLevels = [...new Set(players.map((player) => player.totalContribution).filter((n) => n > 0))].sort(
@@ -481,7 +487,7 @@ export class HandEngine {
       });
     }
 
-    return {
+    const resolved = {
       handNumber: state.handNumber,
       board: [...state.board],
       winners: [...winnings.entries()].map(([seatIndex, amountWon]) => ({
@@ -490,6 +496,67 @@ export class HandEngine {
       })),
       updatedStacks,
     };
+
+    this.assertSettlementInvariants(state, resolved);
+    return resolved;
+  }
+
+  private assertSettlementInvariants(state: RuntimeHandState, resolved: ResolvedHand): void {
+    const players = [...state.players.values()];
+    const contenders = new Set(players.filter((player) => !player.folded).map((player) => player.seatIndex));
+    const totalPot = players.reduce((sum, player) => sum + player.totalContribution, 0);
+    const totalAwarded = resolved.winners.reduce((sum, winner) => sum + winner.amountWon, 0);
+
+    if (totalAwarded !== totalPot) {
+      throw new Error(
+        `Settlement invariant failed: awarded ${totalAwarded} but pot is ${totalPot} on hand ${state.handNumber}.`,
+      );
+    }
+
+    const winnerSeatSet = new Set<number>();
+    for (const winner of resolved.winners) {
+      if (winner.amountWon < 0) {
+        throw new Error(
+          `Settlement invariant failed: negative payout ${winner.amountWon} for seat ${winner.seatIndex}.`,
+        );
+      }
+
+      if (!contenders.has(winner.seatIndex)) {
+        throw new Error(
+          `Settlement invariant failed: folded/non-contender seat ${winner.seatIndex} received payout.`,
+        );
+      }
+
+      if (winnerSeatSet.has(winner.seatIndex)) {
+        throw new Error(
+          `Settlement invariant failed: duplicate payout entry for seat ${winner.seatIndex}.`,
+        );
+      }
+
+      winnerSeatSet.add(winner.seatIndex);
+    }
+
+    const stackBySeat = new Map<number, number>();
+    for (const player of players) {
+      stackBySeat.set(player.seatIndex, player.stack);
+    }
+
+    const totalUpdatedStack = resolved.updatedStacks.reduce((sum, seat) => {
+      const initialStack = stackBySeat.get(seat.seatIndex);
+      if (initialStack === undefined) {
+        throw new Error(
+          `Settlement invariant failed: updated stack contains unknown seat ${seat.seatIndex}.`,
+        );
+      }
+      return sum + seat.stack;
+    }, 0);
+
+    const totalPreSettlementStack = players.reduce((sum, player) => sum + player.stack, 0);
+    if (totalUpdatedStack !== totalPreSettlementStack + totalPot) {
+      throw new Error(
+        `Settlement invariant failed: chip conservation mismatch (updated=${totalUpdatedStack}, expected=${totalPreSettlementStack + totalPot}).`,
+      );
+    }
   }
 
   private moveActor(state: RuntimeHandState): void {
