@@ -467,6 +467,98 @@ export async function startMatchRunner(matchId: string): Promise<{
   return { started: true };
 }
 
+export async function pauseMatchRunner(matchId: string): Promise<{
+  paused: boolean;
+  reason?: string;
+}> {
+  const existing = await prisma.match.findUnique({ where: { id: matchId } });
+
+  if (!existing) {
+    return { paused: false, reason: "Match not found." };
+  }
+
+  if (existing.status === MatchStatus.completed || existing.status === MatchStatus.failed) {
+    return { paused: false, reason: `Match is already ${existing.status}.` };
+  }
+
+  const interval = activeIntervals.get(matchId);
+  if (interval) {
+    clearInterval(interval);
+    activeIntervals.delete(matchId);
+  }
+
+  if (existing.status !== MatchStatus.paused) {
+    await prisma.match.update({
+      where: { id: matchId },
+      data: { status: MatchStatus.paused },
+    });
+  }
+
+  return { paused: true };
+}
+
+export async function stepMatchRunner(matchId: string): Promise<{
+  stepped: boolean;
+  reason?: string;
+}> {
+  const existing = await prisma.match.findUnique({ where: { id: matchId } });
+
+  if (!existing) {
+    return { stepped: false, reason: "Match not found." };
+  }
+
+  if (existing.status === MatchStatus.completed || existing.status === MatchStatus.failed) {
+    return { stepped: false, reason: `Match is already ${existing.status}.` };
+  }
+
+  const interval = activeIntervals.get(matchId);
+  if (interval) {
+    clearInterval(interval);
+    activeIntervals.delete(matchId);
+  }
+
+  if (existing.status !== MatchStatus.running) {
+    await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.running,
+        startedAt: existing.startedAt ?? new Date(),
+      },
+    });
+  }
+
+  await tickMatch(matchId);
+
+  const after = await prisma.match.findUnique({ where: { id: matchId } });
+  if (!after) {
+    return { stepped: false, reason: "Match disappeared." };
+  }
+
+  if (after.status === MatchStatus.running) {
+    await prisma.match.update({
+      where: { id: matchId },
+      data: { status: MatchStatus.paused },
+    });
+  }
+
+  return { stepped: true };
+}
+
+export async function getMatchTimeline(matchId: string) {
+  const events = await prisma.matchEvent.findMany({
+    where: { matchId },
+    orderBy: { eventIndex: "asc" },
+  });
+
+  return events.map((event) => ({
+    id: event.id,
+    eventIndex: event.eventIndex,
+    eventType: event.eventType,
+    payload: JSON.parse(event.payloadJson) as Record<string, unknown>,
+    createdAt: event.createdAt,
+  }));
+}
+
 export async function getMatchRuntimeState(matchId: string) {
   const match = await prisma.match.findUnique({
     where: { id: matchId },

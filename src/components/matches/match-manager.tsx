@@ -30,6 +30,14 @@ type MatchSummary = {
   seats: MatchSeatSummary[];
 };
 
+type TimelineEvent = {
+  id: string;
+  eventIndex: number;
+  eventType: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
 export function MatchManager() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [matches, setMatches] = useState<MatchSummary[]>([]);
@@ -41,10 +49,16 @@ export function MatchManager() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [startingMatchId, setStartingMatchId] = useState<string | null>(null);
+  const [pausingMatchId, setPausingMatchId] = useState<string | null>(null);
+  const [resumingMatchId, setResumingMatchId] = useState<string | null>(null);
+  const [steppingMatchId, setSteppingMatchId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [eventMatchFilter, setEventMatchFilter] = useState<string | undefined>(
     undefined,
   );
+  const [timelineMatchId, setTimelineMatchId] = useState<string | null>(null);
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
+  const [timelineIndex, setTimelineIndex] = useState<number>(-1);
 
   const selectedCount = selectedAgentIds.length;
   const canSubmit = selectedCount === 6 && !submitting;
@@ -180,6 +194,99 @@ export function MatchManager() {
       setStartingMatchId(null);
     }
   }
+
+  async function refreshTimeline(matchId: string) {
+    const response = await fetch(`/api/matches/${matchId}/timeline`, {
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const body = (await response.json()) as { error?: string };
+      throw new Error(body.error ?? "Failed to fetch match timeline.");
+    }
+
+    const body = (await response.json()) as {
+      matchId: string;
+      timeline: TimelineEvent[];
+    };
+
+    setTimelineMatchId(body.matchId);
+    setTimelineEvents(body.timeline);
+    setTimelineIndex(body.timeline.length > 0 ? body.timeline.length - 1 : -1);
+  }
+
+  async function onPauseMatch(matchId: string) {
+    setError(null);
+    setPausingMatchId(matchId);
+
+    try {
+      const response = await fetch(`/api/matches/${matchId}/pause`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        throw new Error(body.error ?? "Failed to pause match.");
+      }
+
+      await Promise.all([refreshData(), refreshTimeline(matchId)]);
+    } catch (pauseError) {
+      setError(pauseError instanceof Error ? pauseError.message : "Failed to pause match.");
+    } finally {
+      setPausingMatchId(null);
+    }
+  }
+
+  async function onResumeMatch(matchId: string) {
+    setError(null);
+    setResumingMatchId(matchId);
+
+    try {
+      const response = await fetch(`/api/matches/${matchId}/resume`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        throw new Error(body.error ?? "Failed to resume match.");
+      }
+
+      await refreshData();
+      setEventMatchFilter(matchId);
+    } catch (resumeError) {
+      setError(resumeError instanceof Error ? resumeError.message : "Failed to resume match.");
+    } finally {
+      setResumingMatchId(null);
+    }
+  }
+
+  async function onStepMatch(matchId: string) {
+    setError(null);
+    setSteppingMatchId(matchId);
+
+    try {
+      const response = await fetch(`/api/matches/${matchId}/step`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        throw new Error(body.error ?? "Failed to step match.");
+      }
+
+      await Promise.all([refreshData(), refreshTimeline(matchId)]);
+      setEventMatchFilter(matchId);
+    } catch (stepError) {
+      setError(stepError instanceof Error ? stepError.message : "Failed to step match.");
+    } finally {
+      setSteppingMatchId(null);
+    }
+  }
+
+  const timelineCurrent =
+    timelineIndex >= 0 && timelineIndex < timelineEvents.length
+      ? timelineEvents[timelineIndex]
+      : null;
 
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-6">
@@ -346,10 +453,13 @@ export function MatchManager() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setEventMatchFilter(match.id)}
+                      onClick={() => {
+                        setEventMatchFilter(match.id);
+                        void refreshTimeline(match.id);
+                      }}
                       className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-200 transition hover:bg-zinc-800"
                     >
-                      Watch events
+                      Replay
                     </button>
                     <button
                       type="button"
@@ -362,6 +472,30 @@ export function MatchManager() {
                       className="rounded-md border border-emerald-900 px-2.5 py-1 text-xs text-emerald-300 transition hover:bg-emerald-950/50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {startingMatchId === match.id ? "Starting..." : "Start"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onPauseMatch(match.id)}
+                      disabled={pausingMatchId === match.id || match.status !== "running"}
+                      className="rounded-md border border-amber-900 px-2.5 py-1 text-xs text-amber-300 transition hover:bg-amber-950/50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {pausingMatchId === match.id ? "Pausing..." : "Pause"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onResumeMatch(match.id)}
+                      disabled={resumingMatchId === match.id || match.status === "running" || match.status === "completed"}
+                      className="rounded-md border border-sky-900 px-2.5 py-1 text-xs text-sky-300 transition hover:bg-sky-950/50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {resumingMatchId === match.id ? "Resuming..." : "Resume"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onStepMatch(match.id)}
+                      disabled={steppingMatchId === match.id || match.status === "completed"}
+                      className="rounded-md border border-violet-900 px-2.5 py-1 text-xs text-violet-300 transition hover:bg-violet-950/50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {steppingMatchId === match.id ? "Stepping..." : "Step"}
                     </button>
                   </div>
                 </div>
@@ -380,6 +514,64 @@ export function MatchManager() {
 
       <div className="mt-8">
         <MatchEventsFeed selectedMatchId={eventMatchFilter} />
+      </div>
+
+      <div className="mt-8 rounded-xl border border-zinc-800 bg-zinc-950 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-medium">Replay timeline</h2>
+          <p className="text-xs text-zinc-500">
+            {timelineMatchId ? `match ${timelineMatchId}` : "Select Replay on a match"}
+          </p>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setTimelineIndex((index) => Math.max(-1, index - 1))}
+            disabled={timelineIndex <= -1}
+            className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Step backward
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setTimelineIndex((index) =>
+                Math.min(timelineEvents.length - 1, index + 1),
+              )
+            }
+            disabled={timelineEvents.length === 0 || timelineIndex >= timelineEvents.length - 1}
+            className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Step forward
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setTimelineIndex(timelineEvents.length > 0 ? timelineEvents.length - 1 : -1)
+            }
+            disabled={timelineEvents.length === 0}
+            className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Jump live
+          </button>
+        </div>
+
+        {timelineCurrent ? (
+          <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-900/60 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-300">
+              {timelineCurrent.eventType}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              event #{timelineCurrent.eventIndex} · {new Date(timelineCurrent.createdAt).toLocaleString()}
+            </p>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-zinc-300">
+              {JSON.stringify(timelineCurrent.payload, null, 2)}
+            </pre>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-zinc-500">No timeline event selected.</p>
+        )}
       </div>
     </section>
   );

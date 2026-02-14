@@ -18,6 +18,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Initial match runtime loop and websocket event broadcasting are implemented.
 - Strict JSON action decision contract with retry-once validation and action telemetry persistence is implemented.
 - Runtime now uses a deterministic hand/street engine with dealing, blinds, multi-street action flow, and showdown settlement.
+- Replay controls are implemented with pause/resume/step actions and persisted timeline navigation.
 
 ## Documentation Index
 
@@ -109,7 +110,7 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 ## Next Build Steps
 
 1. Close remaining rules-accuracy gaps (dead-button behavior, heads-up blind transition edge cases, and deeper side-pot verification).
-2. Upgrade runtime events to a full replay timeline model with step-backward navigation.
+2. Expand replay UI from raw timeline payloads into richer table-state visualization per event.
 3. Add Elo leaderboard and match analytics views.
 4. Expand integration tests for deterministic replay and rules correctness.
 
