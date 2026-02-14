@@ -40,11 +40,11 @@ setup:
   just env
   just db-migrate init
 
-# One-command flow: bootstrap, verify, then launch dev server
+# One-command flow: bootstrap, verify, then launch stable server
 all:
   just setup
   just verify
-  just dev
+  just start
 
 # Start local dev server (custom Node + Next + ws)
 dev:

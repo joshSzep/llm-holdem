@@ -37,6 +37,13 @@ const initialEditor: EditorState = {
   apiKey: "",
 };
 
+const editorDraftStorageKey = "llm-holdem-agent-editor-draft-v1";
+
+type EditorDraft = {
+  editor: EditorState;
+  editingId: string | null;
+};
+
 export function AgentManager() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +61,51 @@ export function AgentManager() {
   useEffect(() => {
     void refreshAgents();
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(editorDraftStorageKey);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as Partial<EditorDraft>;
+      if (!parsed.editor) {
+        return;
+      }
+
+      const draft = parsed.editor;
+      if (
+        typeof draft.name !== "string" ||
+        typeof draft.provider !== "string" ||
+        typeof draft.modelId !== "string" ||
+        typeof draft.systemPrompt !== "string" ||
+        typeof draft.apiKey !== "string"
+      ) {
+        return;
+      }
+
+      setEditor({
+        name: draft.name,
+        provider: draft.provider as SupportedProvider,
+        modelId: draft.modelId,
+        systemPrompt: draft.systemPrompt,
+        apiKey: draft.apiKey,
+      });
+      setEditingId(typeof parsed.editingId === "string" ? parsed.editingId : null);
+    } catch {
+      window.sessionStorage.removeItem(editorDraftStorageKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    const draft: EditorDraft = {
+      editor,
+      editingId,
+    };
+
+    window.sessionStorage.setItem(editorDraftStorageKey, JSON.stringify(draft));
+  }, [editor, editingId]);
 
   async function refreshAgents() {
     setLoading(true);
@@ -86,6 +138,7 @@ export function AgentManager() {
   function resetEditor() {
     setEditingId(null);
     setEditor(initialEditor);
+    window.sessionStorage.removeItem(editorDraftStorageKey);
   }
 
   function beginEdit(agent: AgentSummary) {

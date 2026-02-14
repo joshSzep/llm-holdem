@@ -80,6 +80,8 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 	pnpm dev
 	```
 
+	Note: `pnpm dev` runs `tsx server.ts` (no outer watch loop) to avoid dev-runtime restart churn while editing form data.
+
 5. Open app and websocket endpoint:
 
 - App: `http://localhost:3000`
@@ -142,6 +144,8 @@ This repository includes a root `justfile` for common workflows.
 	```bash
 	just all
 	```
+
+	`just all` now verifies and then runs `pnpm start` (production mode) for stable manual testing.
 
 See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 

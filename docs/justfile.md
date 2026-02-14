@@ -36,7 +36,7 @@ just
   End-to-end one-command flow:
   1. run setup,
   2. run full verification (`pnpm verify:all`),
-  3. start dev server.
+  3. start production server (`pnpm start`) for stable manual testing.
 
 - `just setup`  
   First-run bootstrap sequence:
@@ -47,7 +47,10 @@ just
 ### Development and build
 
 - `just dev`  
-  Starts local development runtime (`tsx watch server.ts`) with Next.js + native `ws`.
+  Starts local development runtime (`tsx server.ts`) with Next.js + native `ws`.
+
+- `just start`  
+  Starts the production runtime from the built app.
 
 - `just build`  
   Runs `next build`.
