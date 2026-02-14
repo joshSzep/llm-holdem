@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 import { HandEngine } from "../src/lib/runtime/hand-engine";
 
@@ -108,7 +109,7 @@ function normalizeSeatState(seats: SeatState[]): SeatState[] {
   return [...seats].sort((a, b) => a.seatIndex - b.seatIndex);
 }
 
-function runDeterministicSimulation(matchSeed: string, policySeed: string): SimulationResult {
+export function runDeterministicSimulation(matchSeed: string, policySeed: string): SimulationResult {
   const engine = new HandEngine({
     matchSeed,
     startingStack: 2000,
@@ -215,7 +216,7 @@ function runDeterministicSimulation(matchSeed: string, policySeed: string): Simu
   };
 }
 
-function assertNoReplayDrift(matchSeed: string, policySeed: string): void {
+export function assertNoReplayDrift(matchSeed: string, policySeed: string): void {
   const runA = runDeterministicSimulation(matchSeed, policySeed);
   const runB = runDeterministicSimulation(matchSeed, policySeed);
 
@@ -237,7 +238,7 @@ function assertNoReplayDrift(matchSeed: string, policySeed: string): void {
   }
 }
 
-function main() {
+export function runDeterminismVerification() {
   const scenarios: Array<{ matchSeed: string; policySeed: string }> = [
     { matchSeed: "replay-regression-001", policySeed: "policy-a" },
     { matchSeed: "replay-regression-002", policySeed: "policy-a" },
@@ -247,8 +248,13 @@ function main() {
   for (const scenario of scenarios) {
     assertNoReplayDrift(scenario.matchSeed, scenario.policySeed);
   }
+}
 
+export function main() {
+  runDeterminismVerification();
   process.stdout.write("deterministic replay verification passed\n");
 }
 
-main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main();
+}

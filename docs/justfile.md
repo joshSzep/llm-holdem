@@ -53,7 +53,7 @@ just
   Runs ESLint.
 
 - `just verify`  
-  Runs engine verification, deterministic replay regression verification, rules-integration verification, lint, and build.
+  Runs Vitest runtime suites (engine settlement, determinism, rules integration), lint, and build.
 
 - `just check`  
   Alias for `verify` (full local CI-style validation).

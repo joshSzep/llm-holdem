@@ -1,4 +1,5 @@
 import { HandEngine } from "../src/lib/runtime/hand-engine";
+import { pathToFileURL } from "node:url";
 
 type SeatState = {
   seatIndex: number;
@@ -135,7 +136,7 @@ function assertResolvedHand(
   }
 }
 
-function runRandomizedSimulation(seed: number): void {
+export function runRandomizedSimulation(seed: number): void {
   const random = mulberry32(seed);
   const engine = new HandEngine({
     matchSeed: `verify-${seed}`,
@@ -207,7 +208,7 @@ function runRandomizedSimulation(seed: number): void {
   }
 }
 
-function runForcedAllInScenario(seed: number): void {
+export function runForcedAllInScenario(seed: number): void {
   const engine = new HandEngine({
     matchSeed: `forced-allin-${seed}`,
     startingStack: 2000,
@@ -267,13 +268,18 @@ function runForcedAllInScenario(seed: number): void {
   throw new Error("Forced all-in scenario did not resolve.");
 }
 
-function main() {
+export function runHandEngineVerification() {
   for (let seed = 1; seed <= 25; seed += 1) {
     runRandomizedSimulation(seed);
     runForcedAllInScenario(seed);
   }
+}
 
+export function main() {
+  runHandEngineVerification();
   process.stdout.write("hand engine verification passed\n");
 }
 
-main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main();
+}

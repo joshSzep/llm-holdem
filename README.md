@@ -34,6 +34,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Invalid decision drilldown now supports exporting visible rows as CSV.
 - Provider decision runtime now uses timeout-guarded transport retries with backoff and explicit fallback reason codes.
 - Analytics now includes fallback-reason mix breakdown (for example transport-exhausted vs invalid-output-exhausted).
+- Runtime verification is now backed by Vitest suites with structured JSON reports (`reports/vitest-runtime.json`).
 
 ## Documentation Index
 
@@ -103,7 +104,7 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 	pnpm verify:engine
 	```
 
-	This stress-checks side-pot/showdown invariants, tier payout consistency, and chip conservation across randomized and forced all-in scenarios.
+	This runs the dedicated Vitest settlement suite for side-pot/showdown invariants and chip conservation.
 
 7. Run deterministic replay regression verification:
 
@@ -111,7 +112,7 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 	pnpm verify:determinism
 	```
 
-	This runs fixed-seed simulations twice and fails if timeline fingerprints drift between runs.
+	This runs the Vitest determinism suite and fails if timeline fingerprints drift between runs.
 
 8. Run full local CI-style verification:
 
@@ -127,7 +128,7 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 	pnpm verify:rules
 	```
 
-	This validates blind/action-order rules across multiway, dead-button, and heads-up transition scenarios.
+	This runs the Vitest rules suite for multiway opening order, dead-button behavior, and heads-up transitions.
 
 10. CI automation:
 

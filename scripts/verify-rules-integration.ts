@@ -1,4 +1,5 @@
 import { HandEngine } from "../src/lib/runtime/hand-engine";
+import { pathToFileURL } from "node:url";
 
 type SeatState = {
   seatIndex: number;
@@ -153,7 +154,7 @@ function playAndProbeHand(engine: HandEngine, activeSeats: SeatState[], handNumb
   };
 }
 
-function runDeadButtonAndHeadsUpTransitionScenario(): void {
+export function runDeadButtonAndHeadsUpTransitionScenario(): void {
   const tableOrder = [0, 1, 3, 5];
   const engine = new HandEngine({
     matchSeed: "rules-integration-dead-button",
@@ -212,7 +213,7 @@ function runDeadButtonAndHeadsUpTransitionScenario(): void {
   );
 }
 
-function runMultiwayOpeningOrderScenario(): void {
+export function runMultiwayOpeningOrderScenario(): void {
   const tableOrder = [0, 2, 4, 7, 9, 11];
   const engine = new HandEngine({
     matchSeed: "rules-integration-opening-order",
@@ -243,10 +244,16 @@ function runMultiwayOpeningOrderScenario(): void {
   );
 }
 
-function main() {
+export function runRulesIntegrationVerification() {
   runMultiwayOpeningOrderScenario();
   runDeadButtonAndHeadsUpTransitionScenario();
+}
+
+export function main() {
+  runRulesIntegrationVerification();
   process.stdout.write("rules integration verification passed\n");
 }
 
-main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main();
+}
