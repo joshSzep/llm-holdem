@@ -112,6 +112,10 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 
 	This runs engine verification, deterministic replay regression, lint, and build in one command.
 
+9. CI automation:
+
+	A GitHub Actions workflow at `.github/workflows/verify.yml` runs `pnpm verify:all` on pushes to `main` and on pull requests.
+
 ## Using `just`
 
 This repository includes a root `justfile` for common workflows.
