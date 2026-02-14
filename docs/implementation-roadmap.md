@@ -1,142 +1,96 @@
 # Implementation Roadmap
 
-This roadmap converts finalized decisions into build phases without scaffolding yet.
+This roadmap is now a status-oriented view of what is complete vs what remains.
 
-## Phase 0 — Scaffold and Baseline
+## Status Snapshot (February 2026)
 
-Goals:
+### Completed Foundation
 
-- create Next.js TypeScript project at repo root using `pnpm`,
-- install Tailwind + shadcn/ui,
-- configure Prisma + SQLite,
-- add custom Node server bootstrap with native `ws`.
+- Next.js TypeScript app scaffolded at repository root with Tailwind and custom Node server.
+- Prisma + SQLite persistence and baseline domain modeling.
+- Native websocket event transport for live/replay updates.
+- Security unlock flow with encrypted provider key storage.
+- Agent CRUD with curated provider/model selection.
 
-Deliverables:
+### Completed Runtime + Rules Core
 
-- runnable app shell,
-- database connection and initial migration,
-- websocket connectivity smoke test.
+- Deterministic match execution from persisted seeds.
+- Persisted timeline/events/actions for replay and analysis.
+- Strict decision contract with validation/retry/fallback telemetry.
+- Side-pot-aware showdown settlement and payout invariants.
+- Dead-button handling (3+ handed) and heads-up transition behavior.
+- Replay controls (pause/resume/step) and table-state visualization.
 
-## Phase 1 — Core Domain and Persistence
+### Completed Product Surfaces
 
-Goals:
+- Leaderboard with Elo updates and rating history.
+- Analytics overview for latency/retries/invalid actions/token usage.
+- Invalid-decision drilldown with category filtering.
+- Raw-response inspection/copy/export (JSON + CSV).
+- Fallback reason analytics mix.
 
-- define Prisma schema for agents, matches, hands, actions, events, ratings, logs,
-- add repositories/services for CRUD and event persistence,
-- hardcode curated provider/model config.
+### Completed Verification Infrastructure
 
-Deliverables:
+- Formal Vitest runtime suites:
+  - settlement invariants,
+  - deterministic replay regression,
+  - rules integration scenarios.
+- Unified verification flow via `pnpm verify:all`.
+- CI workflow running verification on push/PR.
 
-- agent storage and retrieval,
-- match metadata records,
-- timeline/event persistence primitives.
+## Remaining Roadmap Tracks
 
-## Phase 2 — Security and Unlock Flow
+## 1) Replay/State Regression Depth
 
-Goals:
+Goal:
+- move beyond fingerprint checks to explicit schema + invariant assertions on timeline payloads.
 
-- implement first-run passphrase setup screen,
-- implement startup unlock gate,
-- implement encryption/decryption helpers for provider keys,
-- enforce unlocked requirement on key-dependent endpoints.
+Planned outcomes:
+- stronger drift detection against payload evolution,
+- clearer failure diagnostics per event class.
 
-Deliverables:
+## 2) Reliability Policy Configurability
 
-- locked/unlocked state UX,
-- encrypted key CRUD,
-- verifier-based startup logic.
+Goal:
+- externalize provider timeout/retry/backoff policies into configurable runtime settings.
 
-## Phase 3 — Agent Runtime and Provider Adapters
+Planned outcomes:
+- per-provider tuning without code edits,
+- safer operational controls for local and CI runs.
 
-Goals:
+## 3) Analytics Productization
 
-- build LangChain-backed provider adapters for OpenAI/Anthropic/Google,
-- implement agent decision prompt builder,
-- implement strict JSON schema validator,
-- implement retry-once invalid-action policy.
+Goal:
+- add trend/time-window analysis and richer pivots (agent/provider/model/fallback reason).
 
-Deliverables:
+Planned outcomes:
+- better comparative diagnostics over time,
+- easier model/provider quality analysis.
 
-- production-ready action-resolution service,
-- persisted raw model responses,
-- per-action latency/token/retry telemetry.
+## 4) Operational Hardening
 
-## Phase 4 — Tournament Engine
+Goal:
+- finalize required checks/branch protection guidance and redaction posture review.
 
-Goals:
+Planned outcomes:
+- clearer production-readiness checklist,
+- reduced risk around secrets/error exposure.
 
-- implement full 6-max SNG rules engine with correctness focus,
-- support side pots, ties/splits, dead button, heads-up transition,
-- support fixed blind progression every 10 hands,
-- persist deterministic seed and full event timeline.
+## 5) Documentation Consolidation
 
-Deliverables:
+Goal:
+- keep `README.md`, architecture docs, and this roadmap synchronized with completed slices.
 
-- end-to-end tournament simulation,
-- reproducible deterministic runs,
-- complete event stream for replay.
+Planned outcomes:
+- lower maintenance overhead,
+- clearer handoff status for future contributors.
 
-## Phase 5 — Real-Time UX + Replay Controls
+## Definition of Done (Current MVP Baseline)
 
-Goals:
+The current baseline is considered complete for local MVP when a user can:
 
-- build match table UI,
-- wire websocket live updates,
-- add run/pause/step controls,
-- add replay index navigation (forward/backward),
-- add adjustable speed slider.
-
-Deliverables:
-
-- watchable live games,
-- replay exploration with backward navigation,
-- no rollback branching.
-
-## Phase 6 — Leaderboard and Observability
-
-Goals:
-
-- implement Elo updates from final placements,
-- build leaderboard UI,
-- expose per-match analytics pages,
-- persist structured logs in SQLite.
-
-Deliverables:
-
-- ranking views and rating history,
-- analytics metrics for latency/retries/invalid actions/token usage.
-
-## Phase 7 — Validation and Hardening
-
-Goals:
-
-- add targeted tests for rules correctness and determinism,
-- add tests for unlock/encryption flow,
-- add websocket event-order tests,
-- validate no secret leakage in logs/responses.
-
-Deliverables:
-
-- stable local MVP,
-- documented known limitations,
-- readiness for iterative feature expansion.
-
-## Suggested Initial Work Breakdown (first build week)
-
-1. Scaffold + Prisma + custom server
-2. Passphrase setup/unlock + encrypted key storage
-3. Agent CRUD + curated model config
-4. Skeleton tournament event pipeline
-5. WebSocket streaming and basic match viewer
-
-## Definition of Done (MVP)
-
-MVP is complete when a user can:
-
-- set up and unlock the app,
-- create six LLM agents with provider/model/system prompt and encrypted keys,
-- run a full SNG with full rules accuracy,
-- watch live updates over WebSockets,
-- pause and replay the timeline backward/forward,
-- inspect logs/raw outputs/analytics,
-- view Elo leaderboard updates after matches.
+- unlock the app and manage encrypted agents,
+- run deterministic 6-max SNG matches,
+- observe live/replay state transitions,
+- inspect leaderboard + analytics + telemetry drilldowns,
+- validate core runtime correctness through `pnpm verify:all`.

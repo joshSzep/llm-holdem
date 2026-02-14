@@ -6,35 +6,22 @@ This repository now includes an initial scaffolded application baseline and deta
 
 ## Current Status
 
-- Product direction and MVP scope are finalized.
-- Core architecture and implementation constraints are documented.
-- Next.js TypeScript app scaffolded at repo root with App Router + Tailwind.
-- Prisma + SQLite baseline configured with initial schema and migration.
-- Custom Node server added with native `ws` endpoint at `/ws`.
-- shadcn/ui initialized for component development.
-- First-run passphrase setup and startup unlock gate are implemented.
-- Agent CRUD with encrypted BYOK storage is implemented.
-- Match create/list foundation is implemented with deterministic seed support and 6-seat agent selection.
-- Initial match runtime loop and websocket event broadcasting are implemented.
-- Strict JSON action decision contract with retry-once validation and action telemetry persistence is implemented.
-- Runtime now uses a deterministic hand/street engine with dealing, blinds, multi-street action flow, and showdown settlement.
-- Replay controls are implemented with pause/resume/step actions and persisted timeline navigation.
-- Elo rating updates and leaderboard APIs/UI are implemented.
-- Match analytics APIs/UI are implemented for latency, retries, invalid actions, and token usage.
-- Replay timeline now includes table-state visualization (board, seats/stacks, actor/action, and showdown winners).
-- Hand engine now applies dead-button movement (3+ players), correct heads-up blind/button transitions, and button-order odd-chip distribution.
-- Settlement flow now auto-runs all-in boards to showdown and correctly resolves single-contender (folded-out) pots.
-- Showdown events now include explicit side-pot tier composition (participants, eligible seats, winners) for replay auditing.
-- Decision telemetry now tags invalid/fallback outcomes by error category and surfaces category mix in analytics.
-- Analytics now includes a filterable recent-invalid-decisions drilldown by error category.
-- Invalid decision analytics now provides expandable raw model response inspection per event.
-- Invalid decision raw responses now support one-click copy-to-clipboard.
-- Invalid decision drilldown now supports copying all currently visible raw responses.
-- Invalid decision drilldown now supports exporting visible rows as JSON.
-- Invalid decision drilldown now supports exporting visible rows as CSV.
-- Provider decision runtime now uses timeout-guarded transport retries with backoff and explicit fallback reason codes.
-- Analytics now includes fallback-reason mix breakdown (for example transport-exhausted vs invalid-output-exhausted).
-- Runtime verification is now backed by Vitest suites with structured JSON reports (`reports/vitest-runtime.json`).
+### Completed Slices
+
+- Platform baseline: Next.js + TypeScript + Tailwind + custom Node server + native `ws` + Prisma/SQLite.
+- Security flow: first-run passphrase setup, startup unlock/lock, encrypted provider key-at-rest storage.
+- Agent system: provider/model/system-prompt CRUD with curated provider/model support.
+- Match runtime: deterministic seeded SNG execution, persisted timeline/events/actions, pause/resume/step controls.
+- Rules accuracy core: multi-street play, showdown settlement, side-pot tier modeling, dead-button handling, heads-up transition handling, odd-chip distribution ordering.
+- Replay UX: timeline navigation with table-state rendering and showdown-side-pot visibility.
+- Rankings + analytics: Elo leaderboard, rating history, telemetry summaries (latency/retries/invalid actions/token usage), invalid-decision drilldowns, fallback-reason analytics.
+- Observability export tools: raw-response inspection/copy, copy-visible set, JSON/CSV export for visible invalid rows.
+- Reliability hardening: provider timeout/backoff/retry policy and explicit fallback-reason semantics in action resolution.
+- Verification framework: Vitest-based runtime suites (settlement, determinism, rules integration) with structured JSON reports.
+
+### Active Focus
+
+- Consolidating docs/roadmap and tightening production-readiness priorities.
 
 ## Documentation Index
 
@@ -161,9 +148,10 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 
 ## Next Build Steps
 
-1. Expand integration tests for deterministic replay and rules correctness.
-
-The current runtime now includes a first decision-driven loop and strict action schema enforcement. Remaining work focuses on replacing the simplified hand flow with full Texas Hold’em rules accuracy.
+1. Deepen replay/state regression assertions (schema stability + critical event invariants).
+2. Externalize provider reliability policy (timeouts/retries/backoff) into configurable runtime settings.
+3. Extend analytics to trend/time-window and per-agent/provider pivots.
+4. Strengthen operational hardening (required checks/branch protection + redaction review).
 
 ## Bootstrap Security Flow
 
