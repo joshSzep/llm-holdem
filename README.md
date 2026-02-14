@@ -110,9 +110,17 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 	pnpm verify:all
 	```
 
-	This runs engine verification, deterministic replay regression, lint, and build in one command.
+	This runs engine verification, deterministic replay regression, rules-integration verification, lint, and build in one command.
 
-9. CI automation:
+9. Run rules integration verification directly:
+
+	```bash
+	pnpm verify:rules
+	```
+
+	This validates blind/action-order rules across multiway, dead-button, and heads-up transition scenarios.
+
+10. CI automation:
 
 	A GitHub Actions workflow at `.github/workflows/verify.yml` runs `pnpm verify:all` on pushes to `main` and on pull requests.
 
