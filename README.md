@@ -26,6 +26,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Settlement flow now auto-runs all-in boards to showdown and correctly resolves single-contender (folded-out) pots.
 - Showdown events now include explicit side-pot tier composition (participants, eligible seats, winners) for replay auditing.
 - Decision telemetry now tags invalid/fallback outcomes by error category and surfaces category mix in analytics.
+- Analytics now includes a filterable recent-invalid-decisions drilldown by error category.
 
 ## Documentation Index
 

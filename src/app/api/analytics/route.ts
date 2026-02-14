@@ -22,6 +22,14 @@ function parseValidationErrorCategory(validationError: string | null): string {
   return "legacy_unclassified";
 }
 
+function stripValidationErrorCategory(validationError: string | null): string | null {
+  if (!validationError) {
+    return null;
+  }
+
+  return validationError.replace(/^\[[a-z_]+\]\s*/i, "").trim();
+}
+
 function asNumber(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return null;
@@ -96,17 +104,23 @@ function percentile(values: number[], p: number): number | null {
   return sorted[index];
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const lockedResponse = requireUnlockedResponse();
   if (lockedResponse) {
     return lockedResponse;
   }
+
+  const url = new URL(request.url);
+  const categoryFilter = url.searchParams.get("category")?.toLowerCase() ?? "all";
+  const limitRaw = Number(url.searchParams.get("limit") ?? 50);
+  const invalidLimit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, Math.floor(limitRaw))) : 50;
 
   const [
     totalMatches,
     completedMatches,
     allActions,
     recentMatches,
+    recentInvalidActions,
   ] = await Promise.all([
     prisma.match.count(),
     prisma.match.count({ where: { status: "completed" } }),
@@ -135,6 +149,33 @@ export async function GET() {
             retried: true,
             validationError: true,
             tokenUsageJson: true,
+          },
+        },
+      },
+    }),
+    prisma.matchAction.findMany({
+      where: {
+        NOT: {
+          validationError: null,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: invalidLimit,
+      select: {
+        id: true,
+        matchId: true,
+        handNumber: true,
+        street: true,
+        actorSeatIndex: true,
+        validationError: true,
+        rawResponse: true,
+        createdAt: true,
+        agent: {
+          select: {
+            id: true,
+            name: true,
+            provider: true,
+            modelId: true,
           },
         },
       },
@@ -228,6 +269,25 @@ export async function GET() {
     };
   });
 
+  const invalidDecisions = recentInvalidActions
+    .map((action) => {
+      const category = parseValidationErrorCategory(action.validationError);
+      return {
+        id: action.id,
+        matchId: action.matchId,
+        handNumber: action.handNumber,
+        street: action.street,
+        actorSeatIndex: action.actorSeatIndex,
+        category,
+        message: stripValidationErrorCategory(action.validationError),
+        validationError: action.validationError,
+        rawResponse: action.rawResponse,
+        createdAt: action.createdAt,
+        agent: action.agent,
+      };
+    })
+    .filter((action) => categoryFilter === "all" || action.category === categoryFilter);
+
   return NextResponse.json({
     overview: {
       totalMatches,
@@ -247,5 +307,6 @@ export async function GET() {
       },
     },
     recentMatches: recent,
+    recentInvalidDecisions: invalidDecisions,
   });
 }

@@ -41,9 +41,29 @@ type MatchAnalyticsRow = {
   };
 };
 
+type InvalidDecisionRow = {
+  id: string;
+  matchId: string;
+  handNumber: number;
+  street: string;
+  actorSeatIndex: number;
+  category: string;
+  message: string | null;
+  validationError: string | null;
+  rawResponse: string;
+  createdAt: string;
+  agent: {
+    id: string;
+    name: string;
+    provider: string;
+    modelId: string;
+  } | null;
+};
+
 type AnalyticsPayload = {
   overview: AnalyticsOverview;
   recentMatches: MatchAnalyticsRow[];
+  recentInvalidDecisions: InvalidDecisionRow[];
 };
 
 function formatRate(rate: number): string {
@@ -74,6 +94,7 @@ export function AnalyticsPanel() {
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const refreshAnalytics = useCallback(async () => {
     setLoading(true);
@@ -100,6 +121,30 @@ export function AnalyticsPanel() {
     void refreshAnalytics();
   }, [refreshAnalytics]);
 
+  async function onCategoryChange(nextCategory: string) {
+    setCategoryFilter(nextCategory);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/analytics?category=${encodeURIComponent(nextCategory)}`, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        throw new Error(body.error ?? "Failed to load analytics.");
+      }
+
+      const body = (await response.json()) as AnalyticsPayload;
+      setAnalytics(body);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load analytics.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-6">
       <div className="flex items-center justify-between gap-3">
@@ -111,7 +156,14 @@ export function AnalyticsPanel() {
         </div>
         <button
           type="button"
-          onClick={() => void refreshAnalytics()}
+          onClick={() => {
+            if (categoryFilter === "all") {
+              void refreshAnalytics();
+              return;
+            }
+
+            void onCategoryChange(categoryFilter);
+          }}
           className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 transition hover:bg-zinc-800"
         >
           Refresh
@@ -195,6 +247,71 @@ export function AnalyticsPanel() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-900/40 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                Recent Invalid Decisions
+              </h3>
+              <div className="flex items-center gap-2 text-xs">
+                <label htmlFor="analytics-category" className="text-zinc-400">
+                  Category
+                </label>
+                <select
+                  id="analytics-category"
+                  value={categoryFilter}
+                  onChange={(event) => void onCategoryChange(event.target.value)}
+                  className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-200"
+                >
+                  <option value="all">all</option>
+                  {Object.keys(analytics.overview.invalidByCategory)
+                    .sort()
+                    .map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            {analytics.recentInvalidDecisions.length === 0 ? (
+              <p className="mt-2 text-xs text-zinc-500">No invalid decisions for this filter.</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto rounded-md border border-zinc-800">
+                <table className="w-full min-w-[980px] text-left text-xs">
+                  <thead className="bg-zinc-900/80 uppercase tracking-wide text-zinc-400">
+                    <tr>
+                      <th className="px-3 py-2">Time</th>
+                      <th className="px-3 py-2">Match</th>
+                      <th className="px-3 py-2">Agent</th>
+                      <th className="px-3 py-2">Hand</th>
+                      <th className="px-3 py-2">Category</th>
+                      <th className="px-3 py-2">Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.recentInvalidDecisions.map((row) => (
+                      <tr key={row.id} className="border-t border-zinc-800 text-zinc-300">
+                        <td className="px-3 py-2 text-zinc-500">
+                          {new Date(row.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2">{row.matchId.slice(0, 10)}</td>
+                        <td className="px-3 py-2">
+                          {row.agent ? `${row.agent.name} (${row.agent.provider})` : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.handNumber} · {row.street} · seat {row.actorSeatIndex + 1}
+                        </td>
+                        <td className="px-3 py-2">{row.category}</td>
+                        <td className="px-3 py-2">{row.message ?? row.validationError ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}
