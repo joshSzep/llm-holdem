@@ -95,6 +95,7 @@ export function AnalyticsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
 
   const refreshAnalytics = useCallback(async () => {
     setLoading(true);
@@ -142,6 +143,18 @@ export function AnalyticsPanel() {
       setError(loadError instanceof Error ? loadError.message : "Failed to load analytics.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function copyRawResponse(rowId: string, rawResponse: string) {
+    try {
+      await navigator.clipboard.writeText(rawResponse);
+      setCopiedRowId(rowId);
+      setTimeout(() => {
+        setCopiedRowId((current) => (current === rowId ? null : current));
+      }, 1500);
+    } catch {
+      setError("Failed to copy raw response.");
     }
   }
 
@@ -309,14 +322,23 @@ export function AnalyticsPanel() {
                         <td className="px-3 py-2">{row.message ?? row.validationError ?? "—"}</td>
                         <td className="px-3 py-2 align-top">
                           {row.rawResponse ? (
-                            <details>
-                              <summary className="cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                view
-                              </summary>
-                              <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950 p-2 text-[11px] text-zinc-400">
-                                {row.rawResponse}
-                              </pre>
-                            </details>
+                            <div className="space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => void copyRawResponse(row.id, row.rawResponse)}
+                                className="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 transition hover:bg-zinc-800"
+                              >
+                                {copiedRowId === row.id ? "copied" : "copy"}
+                              </button>
+                              <details>
+                                <summary className="cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                  view
+                                </summary>
+                                <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950 p-2 text-[11px] text-zinc-400">
+                                  {row.rawResponse}
+                                </pre>
+                              </details>
+                            </div>
                           ) : (
                             "—"
                           )}

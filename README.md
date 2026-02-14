@@ -28,6 +28,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Decision telemetry now tags invalid/fallback outcomes by error category and surfaces category mix in analytics.
 - Analytics now includes a filterable recent-invalid-decisions drilldown by error category.
 - Invalid decision analytics now provides expandable raw model response inspection per event.
+- Invalid decision raw responses now support one-click copy-to-clipboard.
 
 ## Documentation Index
 
