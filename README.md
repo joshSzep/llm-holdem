@@ -20,6 +20,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - [Game Engine Specification](docs/game-engine-spec.md) — tournament rules, state machine, replay model, and action validation contract.
 - [Security & Secrets Specification](docs/security-secrets-spec.md) — encryption at rest, passphrase lifecycle, and threat boundaries.
 - [Roadmap](docs/implementation-roadmap.md) — phased build plan derived from finalized decisions.
+- [Justfile Commands](docs/justfile.md) — command runner reference for local workflows.
 - [Agent Contract](AGENTS.md) — LLM agent I/O, prompt contract, JSON schema, and retry behavior.
 
 ## Product Summary
@@ -73,6 +74,31 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 
 - App: `http://localhost:3000`
 - WebSocket: `ws://localhost:3000/ws`
+
+## Using `just`
+
+This repository includes a root `justfile` for common workflows.
+
+1. Install `just` (macOS):
+
+	```bash
+	brew install just
+	```
+
+2. List available recipes:
+
+	```bash
+	just
+	```
+
+3. Typical workflow:
+
+	```bash
+	just setup
+	just dev
+	```
+
+See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 
 ## Next Build Steps
 
