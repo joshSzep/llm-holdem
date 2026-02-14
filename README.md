@@ -61,6 +61,8 @@ LLM Hold'em v1 is a local-only, single-user platform with:
 	pnpm prisma migrate dev --name init
 	```
 
+	This creates a local SQLite file at `prisma/dev.db`. Database files are intentionally gitignored and should not be committed.
+
 4. Run development server (custom Node + Next + ws):
 
 	```bash
