@@ -38,6 +38,157 @@ type TimelineEvent = {
   createdAt: string;
 };
 
+type ReplaySeatView = {
+  seatIndex: number;
+  name: string | null;
+  stack: number | null;
+  contribution: number | null;
+  folded: boolean | null;
+  allIn: boolean | null;
+  isEliminated: boolean | null;
+};
+
+type ReplayWinnerView = {
+  seatIndex: number;
+  amountWon: number;
+};
+
+type ReplayStateView = {
+  handNumber: number | null;
+  street: string | null;
+  pot: number | null;
+  actorSeatIndex: number | null;
+  actionLabel: string | null;
+  board: string[];
+  seats: ReplaySeatView[];
+  winners: ReplayWinnerView[];
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function buildReplayState(event: TimelineEvent): ReplayStateView {
+  const payload = asRecord(event.payload) ?? {};
+  const summary = asRecord(payload.summary);
+  const summarySeatsRaw = Array.isArray(summary?.seats) ? summary.seats : [];
+
+  const nameBySeat = new Map<number, string>();
+  for (const seatValue of summarySeatsRaw) {
+    const seat = asRecord(seatValue);
+    const seatIndex = asNumber(seat?.seatIndex);
+    const agent = asRecord(seat?.agent);
+    const name = asString(agent?.name);
+
+    if (seatIndex !== null && name) {
+      nameBySeat.set(seatIndex, name);
+    }
+  }
+
+  const tableState = asRecord(payload.tableState);
+  const tableSeatsRaw = Array.isArray(tableState?.seats) ? tableState.seats : [];
+  const winnersRaw = Array.isArray(tableState?.winners)
+    ? tableState.winners
+    : Array.isArray(payload.winners)
+      ? payload.winners
+      : [];
+
+  let seats: ReplaySeatView[] = [];
+
+  if (tableSeatsRaw.length > 0) {
+    seats = tableSeatsRaw.reduce<ReplaySeatView[]>((accumulator, seatValue) => {
+        const seat = asRecord(seatValue);
+        const seatIndex = asNumber(seat?.seatIndex);
+        if (seatIndex === null) {
+          return accumulator;
+        }
+
+        accumulator.push({
+          seatIndex,
+          name: nameBySeat.get(seatIndex) ?? null,
+          stack: asNumber(seat?.stack),
+          contribution: asNumber(seat?.contribution),
+          folded: asBoolean(seat?.folded),
+          allIn: asBoolean(seat?.allIn),
+          isEliminated: null,
+        });
+
+        return accumulator;
+      }, []);
+    seats.sort((a, b) => a.seatIndex - b.seatIndex);
+  } else if (summarySeatsRaw.length > 0) {
+    seats = summarySeatsRaw.reduce<ReplaySeatView[]>((accumulator, seatValue) => {
+        const seat = asRecord(seatValue);
+        const seatIndex = asNumber(seat?.seatIndex);
+        if (seatIndex === null) {
+          return accumulator;
+        }
+
+        const agent = asRecord(seat?.agent);
+        accumulator.push({
+          seatIndex,
+          name: asString(agent?.name),
+          stack: asNumber(seat?.stack),
+          contribution: null,
+          folded: null,
+          allIn: null,
+          isEliminated: asBoolean(seat?.isEliminated),
+        });
+
+        return accumulator;
+      }, []);
+    seats.sort((a, b) => a.seatIndex - b.seatIndex);
+  }
+
+  const winners = winnersRaw
+    .map((winnerValue) => {
+      const winner = asRecord(winnerValue);
+      const seatIndex = asNumber(winner?.seatIndex);
+      const amountWon = asNumber(winner?.amountWon);
+      if (seatIndex === null || amountWon === null) {
+        return null;
+      }
+
+      return { seatIndex, amountWon } satisfies ReplayWinnerView;
+    })
+    .filter((winner): winner is ReplayWinnerView => Boolean(winner));
+
+  const action = asRecord(payload.action);
+  const actionName = asString(action?.action);
+  const actionAmount = asNumber(action?.amount);
+
+  return {
+    handNumber: asNumber(tableState?.handNumber) ?? asNumber(payload.handNumber),
+    street: asString(tableState?.street) ?? asString(payload.street),
+    pot: asNumber(tableState?.pot),
+    actorSeatIndex: asNumber(tableState?.actorSeatIndex) ?? asNumber(payload.actorSeatIndex),
+    actionLabel: actionName ? `${actionName}${actionAmount !== null ? ` ${actionAmount}` : ""}` : null,
+    board: asStringArray(tableState?.board ?? payload.board),
+    seats,
+    winners,
+  };
+}
+
 export function MatchManager() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [matches, setMatches] = useState<MatchSummary[]>([]);
@@ -287,6 +438,7 @@ export function MatchManager() {
     timelineIndex >= 0 && timelineIndex < timelineEvents.length
       ? timelineEvents[timelineIndex]
       : null;
+  const replayState = timelineCurrent ? buildReplayState(timelineCurrent) : null;
 
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-6">
@@ -565,9 +717,108 @@ export function MatchManager() {
             <p className="mt-1 text-xs text-zinc-500">
               event #{timelineCurrent.eventIndex} · {new Date(timelineCurrent.createdAt).toLocaleString()}
             </p>
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-zinc-300">
-              {JSON.stringify(timelineCurrent.payload, null, 2)}
-            </pre>
+
+            <div className="mt-3 grid gap-3 text-xs md:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-zinc-500">Hand</p>
+                <p className="mt-1 text-sm text-zinc-200">
+                  {replayState?.handNumber !== null ? replayState?.handNumber : "—"}
+                </p>
+              </div>
+              <div className="rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-zinc-500">Street</p>
+                <p className="mt-1 text-sm text-zinc-200">{replayState?.street ?? "—"}</p>
+              </div>
+              <div className="rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-zinc-500">Pot</p>
+                <p className="mt-1 text-sm text-zinc-200">
+                  {replayState?.pot !== null ? replayState?.pot : "—"}
+                </p>
+              </div>
+              <div className="rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-zinc-500">Last action</p>
+                <p className="mt-1 text-sm text-zinc-200">{replayState?.actionLabel ?? "—"}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Board</p>
+              {replayState?.board.length ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {replayState.board.map((card, index) => (
+                    <span
+                      key={`${card}-${index}`}
+                      className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200"
+                    >
+                      {card}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-zinc-500">No board cards revealed.</p>
+              )}
+            </div>
+
+            <div className="mt-3 overflow-x-auto rounded-md border border-zinc-800">
+              <table className="w-full min-w-[620px] text-left text-xs">
+                <thead className="bg-zinc-900/80 uppercase tracking-wide text-zinc-500">
+                  <tr>
+                    <th className="px-3 py-2">Seat</th>
+                    <th className="px-3 py-2">Agent</th>
+                    <th className="px-3 py-2">Stack</th>
+                    <th className="px-3 py-2">Contrib</th>
+                    <th className="px-3 py-2">State</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(replayState?.seats ?? []).map((seat) => {
+                    const isActor = replayState?.actorSeatIndex === seat.seatIndex;
+                    const status = seat.folded
+                      ? "folded"
+                      : seat.allIn
+                        ? "all-in"
+                        : seat.isEliminated
+                          ? "eliminated"
+                          : "active";
+
+                    return (
+                      <tr
+                        key={`${timelineCurrent.id}-${seat.seatIndex}`}
+                        className={`border-t border-zinc-800 text-zinc-300 ${
+                          isActor ? "bg-zinc-800/50" : ""
+                        }`}
+                      >
+                        <td className="px-3 py-2">{seat.seatIndex + 1}</td>
+                        <td className="px-3 py-2">{seat.name ?? "—"}</td>
+                        <td className="px-3 py-2">{seat.stack ?? "—"}</td>
+                        <td className="px-3 py-2">{seat.contribution ?? "—"}</td>
+                        <td className="px-3 py-2">{status}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {replayState?.winners.length ? (
+              <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3 text-xs text-zinc-300">
+                <p className="uppercase tracking-wide text-zinc-500">Winners</p>
+                <ul className="mt-2 space-y-1">
+                  {replayState.winners.map((winner) => (
+                    <li key={`${winner.seatIndex}-${winner.amountWon}`}>
+                      Seat {winner.seatIndex + 1}: +{winner.amountWon}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs text-zinc-500">Raw payload</summary>
+              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-zinc-400">
+                {JSON.stringify(timelineCurrent.payload, null, 2)}
+              </pre>
+            </details>
           </div>
         ) : (
           <p className="mt-4 text-sm text-zinc-500">No timeline event selected.</p>

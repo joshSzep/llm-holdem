@@ -66,6 +66,29 @@ function getOrCreateEngine(matchId: string, seed: string, startingStack: number)
   return engine;
 }
 
+function buildTableStatePayload(
+  snapshot: ReturnType<HandEngine["getSnapshot"]>,
+  actorSeatIndex?: number,
+  action?: { action: string; amount: number },
+) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const pot = snapshot.seats.reduce((sum, seat) => sum + seat.contribution, 0);
+
+  return {
+    handNumber: snapshot.handNumber,
+    street: snapshot.street,
+    board: snapshot.board,
+    pot,
+    actorSeatIndex,
+    action,
+    seats: snapshot.seats,
+    actionsThisHand: snapshot.actionsThisHand,
+  };
+}
+
 async function syncStacksFromSnapshot(
   matchId: string,
   snapshot: ReturnType<HandEngine["getSnapshot"]>,
@@ -323,6 +346,11 @@ async function tickMatch(matchId: string): Promise<void> {
         action: decision.decision,
         board: engine.getSnapshot()?.board ?? step.hand.board,
         street: engine.getSnapshot()?.street ?? step.hand.street,
+        tableState: buildTableStatePayload(
+          engine.getSnapshot(),
+          step.hand.actorSeatIndex,
+          decision.decision,
+        ),
         summary: serializeMatchSummary(refreshed),
       },
     });
@@ -361,6 +389,13 @@ async function tickMatch(matchId: string): Promise<void> {
           street: "showdown",
           board: resolvedHand.board,
           winners: resolvedHand.winners,
+          tableState: {
+            handNumber: resolvedHand.handNumber,
+            street: "showdown",
+            board: resolvedHand.board,
+            pot: resolvedHand.winners.reduce((sum, winner) => sum + winner.amountWon, 0),
+            winners: resolvedHand.winners,
+          },
         },
       });
 

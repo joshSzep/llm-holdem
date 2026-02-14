@@ -21,6 +21,7 @@ This repository now includes an initial scaffolded application baseline and deta
 - Replay controls are implemented with pause/resume/step actions and persisted timeline navigation.
 - Elo rating updates and leaderboard APIs/UI are implemented.
 - Match analytics APIs/UI are implemented for latency, retries, invalid actions, and token usage.
+- Replay timeline now includes table-state visualization (board, seats/stacks, actor/action, and showdown winners).
 
 ## Documentation Index
 
@@ -112,8 +113,7 @@ See [docs/justfile.md](docs/justfile.md) for full recipe documentation.
 ## Next Build Steps
 
 1. Close remaining rules-accuracy gaps (dead-button behavior, heads-up blind transition edge cases, and deeper side-pot verification).
-2. Expand replay UI from raw timeline payloads into richer table-state visualization per event.
-3. Expand integration tests for deterministic replay and rules correctness.
+2. Expand integration tests for deterministic replay and rules correctness.
 
 The current runtime now includes a first decision-driven loop and strict action schema enforcement. Remaining work focuses on replacing the simplified hand flow with full Texas Hold’em rules accuracy.
 
